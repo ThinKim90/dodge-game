@@ -10,13 +10,13 @@ const GAME_CONFIG = {
   CANVAS_HEIGHT: 600,
   PLAYER_WIDTH: 24,
   PLAYER_HEIGHT: 40,
-  PLAYER_SPEED: 5,
+  PLAYER_SPEED: 7,
   FALLING_OBJECT_WIDTH: 30,
   FALLING_OBJECT_HEIGHT: 30,
-  INITIAL_FALLING_SPEED: 3.5,
-  SPAWN_RATE: 0.035,
-  MAX_FALLING_OBJECTS: 15,
-  LEVEL_UP_SCORE: 20 // 20점마다 레벨업
+  INITIAL_FALLING_SPEED: 10.5,
+  SPAWN_RATE: 0.105,
+  MAX_FALLING_OBJECTS: 45,
+  LEVEL_UP_SCORE: 15 // 15점마다 레벨업 (빠른 난이도 상승)
 }
 
 // 타입 정의
@@ -38,10 +38,10 @@ const getCurrentLevel = (score: number): number => {
   return Math.floor(score / GAME_CONFIG.LEVEL_UP_SCORE) + 1
 }
 
-// 레벨 기반 속도 계산 함수 (스폰 시에만 사용)
+// 레벨 기반 속도 계산 함수 (극한 난이도)
 const getSpeedByLevel = (level: number): number => {
-  // 선형 증가로 안정적인 난이도 조절
-  return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 0.5 * (level - 1))
+  // 극한 난이도 - 매우 가파른 속도 증가
+  return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 1.0 * (level - 1))
 }
 
 const DodgeGame = () => {
@@ -118,9 +118,9 @@ const DodgeGame = () => {
       return
     }
     
-    // 레벨에 따른 스폰율 증가 (최대 2배까지)
-    const levelSpawnRate = GAME_CONFIG.SPAWN_RATE * (1 + (level - 1) * 0.15)
-    const maxSpawnRate = GAME_CONFIG.SPAWN_RATE * 2.5 // 최대 2.5배
+    // 레벨에 따른 스폰율 증가 (극한 난이도 - 최대 4배까지)
+    const levelSpawnRate = GAME_CONFIG.SPAWN_RATE * (1 + (level - 1) * 0.3)
+    const maxSpawnRate = GAME_CONFIG.SPAWN_RATE * 4 // 최대 4배
     const currentSpawnRate = Math.min(levelSpawnRate, maxSpawnRate)
     
     if (Math.random() < currentSpawnRate) {
