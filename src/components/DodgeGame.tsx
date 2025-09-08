@@ -13,9 +13,9 @@ const GAME_CONFIG = {
   PLAYER_SPEED: 5,
   FALLING_OBJECT_WIDTH: 30,
   FALLING_OBJECT_HEIGHT: 30,
-  INITIAL_FALLING_SPEED: 2.5,
-  SPAWN_RATE: 0.02,
-  MAX_FALLING_OBJECTS: 10,
+  INITIAL_FALLING_SPEED: 3.5,
+  SPAWN_RATE: 0.035,
+  MAX_FALLING_OBJECTS: 15,
   LEVEL_UP_SCORE: 20 // 20점마다 레벨업
 }
 
@@ -118,7 +118,12 @@ const DodgeGame = () => {
       return
     }
     
-    if (Math.random() < GAME_CONFIG.SPAWN_RATE) {
+    // 레벨에 따른 스폰율 증가 (최대 2배까지)
+    const levelSpawnRate = GAME_CONFIG.SPAWN_RATE * (1 + (level - 1) * 0.15)
+    const maxSpawnRate = GAME_CONFIG.SPAWN_RATE * 2.5 // 최대 2.5배
+    const currentSpawnRate = Math.min(levelSpawnRate, maxSpawnRate)
+    
+    if (Math.random() < currentSpawnRate) {
       fallingObjectsRef.current.push({
         x: Math.random() * (GAME_CONFIG.CANVAS_WIDTH - GAME_CONFIG.FALLING_OBJECT_WIDTH),
         y: 0,
