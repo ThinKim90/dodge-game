@@ -13,7 +13,7 @@ const GAME_CONFIG = {
   PLAYER_SPEED: 5,
   FALLING_OBJECT_WIDTH: 30,
   FALLING_OBJECT_HEIGHT: 30,
-  INITIAL_FALLING_SPEED: 2.0,
+  INITIAL_FALLING_SPEED: 2.5,
   SPAWN_RATE: 0.02,
   MAX_FALLING_OBJECTS: 10,
   LEVEL_UP_SCORE: 20 // 20점마다 레벨업
@@ -41,7 +41,7 @@ const getCurrentLevel = (score: number): number => {
 // 레벨 기반 속도 계산 함수 (스폰 시에만 사용)
 const getSpeedByLevel = (level: number): number => {
   // 선형 증가로 안정적인 난이도 조절
-  return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 0.3 * (level - 1))
+  return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 0.5 * (level - 1))
 }
 
 const DodgeGame = () => {
