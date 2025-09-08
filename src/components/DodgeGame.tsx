@@ -64,6 +64,7 @@ const DodgeGame = () => {
   const [leaderBoardKey, setLeaderBoardKey] = useState(0) // 리더보드 새로고침용
   const [levelUpEffect, setLevelUpEffect] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false)
+  const [touchDebug, setTouchDebug] = useState({ left: false, right: false })
   
   // 게임 오브젝트
   const playerRef = useRef<GameObject>({
@@ -339,22 +340,33 @@ const DodgeGame = () => {
     // 터치 이벤트 핸들러
     const handleTouchStart = (e: TouchEvent) => {
       e.preventDefault()
+      const canvas = canvasRef.current
+      if (!canvas) return
+      
       const touch = e.touches[0]
-      touchRef.current.startX = touch.clientX
+      const rect = canvas.getBoundingClientRect()
+      touchRef.current.startX = touch.clientX - rect.left
     }
 
     const handleTouchMove = (e: TouchEvent) => {
       e.preventDefault()
+      const canvas = canvasRef.current
+      if (!canvas) return
+      
       const touch = e.touches[0]
-      const deltaX = touch.clientX - touchRef.current.startX
-      const threshold = 30 // 터치 감도
+      const rect = canvas.getBoundingClientRect()
+      const currentX = touch.clientX - rect.left
+      const deltaX = currentX - touchRef.current.startX
+      const threshold = 20 // 터치 감도 (더 민감하게)
 
       if (Math.abs(deltaX) > threshold) {
         touchRef.current.isMovingLeft = deltaX < 0
         touchRef.current.isMovingRight = deltaX > 0
+        setTouchDebug({ left: deltaX < 0, right: deltaX > 0 })
       } else {
         touchRef.current.isMovingLeft = false
         touchRef.current.isMovingRight = false
+        setTouchDebug({ left: false, right: false })
       }
     }
 
@@ -364,18 +376,27 @@ const DodgeGame = () => {
       touchRef.current.isMovingRight = false
     }
 
+    const canvas = canvasRef.current
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('touchstart', handleTouchStart, { passive: false })
-    window.addEventListener('touchmove', handleTouchMove, { passive: false })
-    window.addEventListener('touchend', handleTouchEnd, { passive: false })
+    
+    // 캔버스에 터치 이벤트 등록
+    if (canvas) {
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
+      canvas.addEventListener('touchend', handleTouchEnd, { passive: false })
+    }
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', handleTouchEnd)
+      
+      if (canvas) {
+        canvas.removeEventListener('touchstart', handleTouchStart)
+        canvas.removeEventListener('touchmove', handleTouchMove)
+        canvas.removeEventListener('touchend', handleTouchEnd)
+      }
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current)
       }
@@ -510,27 +531,50 @@ const DodgeGame = () => {
           <div className="text-center text-gray-400 text-sm bg-gray-800 rounded-lg p-3">
             <p className="mb-2">🖥️ 데스크톱: ← → 키로 이동 | 📱 모바일: 화면 드래그</p>
             
+            {/* 터치 디버그 정보 */}
+            <div className="text-xs text-green-400 mb-2 md:hidden">
+              터치 상태: 왼쪽 {touchDebug.left ? '✅' : '❌'} | 오른쪽 {touchDebug.right ? '✅' : '❌'}
+            </div>
+            
             {/* 모바일 터치 버튼 */}
             <div className="flex justify-center space-x-4 mt-3 md:hidden">
               <button
-                onTouchStart={() => {
+                onTouchStart={(e) => {
+                  e.preventDefault()
                   touchRef.current.isMovingLeft = true
                 }}
-                onTouchEnd={() => {
+                onTouchEnd={(e) => {
+                  e.preventDefault()
                   touchRef.current.isMovingLeft = false
                 }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700"
+                onMouseDown={() => {
+                  touchRef.current.isMovingLeft = true
+                }}
+                onMouseUp={() => {
+                  touchRef.current.isMovingLeft = false
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700 touch-manipulation"
+                style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 ← 왼쪽
               </button>
               <button
-                onTouchStart={() => {
+                onTouchStart={(e) => {
+                  e.preventDefault()
                   touchRef.current.isMovingRight = true
                 }}
-                onTouchEnd={() => {
+                onTouchEnd={(e) => {
+                  e.preventDefault()
                   touchRef.current.isMovingRight = false
                 }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700"
+                onMouseDown={() => {
+                  touchRef.current.isMovingRight = true
+                }}
+                onMouseUp={() => {
+                  touchRef.current.isMovingRight = false
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700 touch-manipulation"
+                style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 오른쪽 →
               </button>
