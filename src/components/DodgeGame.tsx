@@ -75,6 +75,11 @@ const DodgeGame = () => {
   
   const fallingObjectsRef = useRef<FallingObject[]>([])
   const keysRef = useRef<{[key: string]: boolean}>({})
+  const touchRef = useRef<{ 
+    isMovingLeft: boolean
+    isMovingRight: boolean 
+    startX: number
+  }>({ isMovingLeft: false, isMovingRight: false, startX: 0 })
   const startTimeRef = useRef<number>(0)
   
   // 충돌 감지 함수 (AABB)
@@ -89,10 +94,19 @@ const DodgeGame = () => {
   const updatePlayer = useCallback(() => {
     const player = playerRef.current
     
+    // 키보드 입력
     if (keysRef.current['ArrowLeft'] && player.x > 0) {
       player.x -= GAME_CONFIG.PLAYER_SPEED
     }
     if (keysRef.current['ArrowRight'] && player.x < GAME_CONFIG.CANVAS_WIDTH - player.width) {
+      player.x += GAME_CONFIG.PLAYER_SPEED
+    }
+    
+    // 터치 입력
+    if (touchRef.current.isMovingLeft && player.x > 0) {
+      player.x -= GAME_CONFIG.PLAYER_SPEED
+    }
+    if (touchRef.current.isMovingRight && player.x < GAME_CONFIG.CANVAS_WIDTH - player.width) {
       player.x += GAME_CONFIG.PLAYER_SPEED
     }
   }, [])
@@ -322,12 +336,46 @@ const DodgeGame = () => {
       }
     }
 
+    // 터치 이벤트 핸들러
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault()
+      const touch = e.touches[0]
+      touchRef.current.startX = touch.clientX
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      const touch = e.touches[0]
+      const deltaX = touch.clientX - touchRef.current.startX
+      const threshold = 30 // 터치 감도
+
+      if (Math.abs(deltaX) > threshold) {
+        touchRef.current.isMovingLeft = deltaX < 0
+        touchRef.current.isMovingRight = deltaX > 0
+      } else {
+        touchRef.current.isMovingLeft = false
+        touchRef.current.isMovingRight = false
+      }
+    }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      e.preventDefault()
+      touchRef.current.isMovingLeft = false
+      touchRef.current.isMovingRight = false
+    }
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('touchstart', handleTouchStart, { passive: false })
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', handleTouchEnd, { passive: false })
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current)
       }
@@ -460,8 +508,33 @@ const DodgeGame = () => {
           
           {/* 모바일 컨트롤 */}
           <div className="text-center text-gray-400 text-sm bg-gray-800 rounded-lg p-3">
-            <p>🖥️ 데스크톱: ← → 키로 이동</p>
-            <p>📱 모바일: 하단 버튼 터치</p>
+            <p className="mb-2">🖥️ 데스크톱: ← → 키로 이동 | 📱 모바일: 화면 드래그</p>
+            
+            {/* 모바일 터치 버튼 */}
+            <div className="flex justify-center space-x-4 mt-3 md:hidden">
+              <button
+                onTouchStart={() => {
+                  touchRef.current.isMovingLeft = true
+                }}
+                onTouchEnd={() => {
+                  touchRef.current.isMovingLeft = false
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700"
+              >
+                ← 왼쪽
+              </button>
+              <button
+                onTouchStart={() => {
+                  touchRef.current.isMovingRight = true
+                }}
+                onTouchEnd={() => {
+                  touchRef.current.isMovingRight = false
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700"
+              >
+                오른쪽 →
+              </button>
+            </div>
           </div>
         </div>
         
