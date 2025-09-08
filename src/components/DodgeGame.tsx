@@ -8,15 +8,15 @@ import ScoreSubmissionModal from './ScoreSubmissionModal'
 const GAME_CONFIG = {
   CANVAS_WIDTH: 400,
   CANVAS_HEIGHT: 600,
-  PLAYER_WIDTH: 40,
+  PLAYER_WIDTH: 24,
   PLAYER_HEIGHT: 40,
   PLAYER_SPEED: 5,
   FALLING_OBJECT_WIDTH: 30,
   FALLING_OBJECT_HEIGHT: 30,
-  INITIAL_FALLING_SPEED: 1.5,
+  INITIAL_FALLING_SPEED: 2.0,
   SPAWN_RATE: 0.02,
   MAX_FALLING_OBJECTS: 10,
-  LEVEL_UP_SCORE: 30 // 30점마다 레벨업
+  LEVEL_UP_SCORE: 20 // 20점마다 레벨업
 }
 
 // 타입 정의
@@ -38,16 +38,22 @@ const getCurrentLevel = (score: number): number => {
   return Math.floor(score / GAME_CONFIG.LEVEL_UP_SCORE) + 1
 }
 
-// 레벨 기반 속도 배율 계산 함수
-const getSpeedMultiplierByScore = (level: number): number => {
-  // 제곱근 기반 + 더욱 완만한 증가율
-  return 1 + Math.sqrt(level - 1) * 0.08
+// 레벨 기반 속도 계산 함수 (스폰 시에만 사용)
+const getSpeedByLevel = (level: number): number => {
+  // 선형 증가로 안정적인 난이도 조절
+  return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 0.3 * (level - 1))
 }
 
 const DodgeGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<number | undefined>(undefined)
   const lastTimeRef = useRef<number>(0)
+  const prevTimeRef = useRef<number>(0)
+  const loopRef = useRef<(t: number) => void>(() => {})
+  
+  // 이미지 관련 ref들
+  const rocketImageRef = useRef<HTMLImageElement | undefined>(undefined)
+  const meteorImages = useRef<HTMLImageElement[]>([])
   
   // 게임 상태
   const [gameState, setGameState] = useState<GameState>('start')
@@ -57,6 +63,7 @@ const DodgeGame = () => {
   const [showModal, setShowModal] = useState(false)
   const [leaderBoardKey, setLeaderBoardKey] = useState(0) // 리더보드 새로고침용
   const [levelUpEffect, setLevelUpEffect] = useState(false)
+  const [imagesLoaded, setImagesLoaded] = useState(false)
   
   // 게임 오브젝트
   const playerRef = useRef<GameObject>({
@@ -90,34 +97,28 @@ const DodgeGame = () => {
     }
   }, [])
 
-  // 낙하물 스폰
+  // 낙하물 스폰 (스폰 시에만 속도 결정)
   const spawnFallingObject = useCallback(() => {
     if (fallingObjectsRef.current.length >= GAME_CONFIG.MAX_FALLING_OBJECTS) {
       return
     }
     
     if (Math.random() < GAME_CONFIG.SPAWN_RATE) {
-      // 현재 레벨(state)에 따라 속도 결정
-      const speedMultiplier = getSpeedMultiplierByScore(level)
-      
       fallingObjectsRef.current.push({
         x: Math.random() * (GAME_CONFIG.CANVAS_WIDTH - GAME_CONFIG.FALLING_OBJECT_WIDTH),
         y: 0,
         width: GAME_CONFIG.FALLING_OBJECT_WIDTH,
         height: GAME_CONFIG.FALLING_OBJECT_HEIGHT,
-        speed: GAME_CONFIG.INITIAL_FALLING_SPEED * speedMultiplier
+        speed: getSpeedByLevel(level) // 스폰 시에만 레벨 기반 속도 결정
       })
     }
   }, [level])
 
-  // 낙하물 업데이트 (레벨에 따른 속도 동적 조절)
-  const updateFallingObjects = useCallback(() => {
-    const currentSpeedMultiplier = getSpeedMultiplierByScore(level)
-    
+  // 낙하물 업데이트 (스폰 시 정한 속도만 사용)
+  const updateFallingObjects = useCallback((dt = 1) => {
     fallingObjectsRef.current = fallingObjectsRef.current.filter(obj => {
-      // 현재 레벨에 맞는 속도로 이동 (동적 속도 조절)
-      const currentSpeed = GAME_CONFIG.INITIAL_FALLING_SPEED * currentSpeedMultiplier
-      obj.y += currentSpeed
+      // 스폰 시에 정한 obj.speed만 사용 (매 프레임 재계산 안함)
+      obj.y += obj.speed * dt
       
       // 화면 아래로 벗어난 객체 제거 및 점수 증가
       if (obj.y > GAME_CONFIG.CANVAS_HEIGHT) {
@@ -127,7 +128,7 @@ const DodgeGame = () => {
       
       return true
     })
-  }, [level])
+  }, [])
 
   // 충돌 체크
   const checkCollisions = useCallback(() => {
@@ -167,39 +168,55 @@ const DodgeGame = () => {
       ctx.fillRect(x, y, size, size)
     }
     
-    // 플레이어 그리기 (로켓 모양)
+    // 플레이어 그리기 (로켓 이미지 또는 기본 그래픽)
     const player = playerRef.current
-    ctx.fillStyle = '#3b82f6'
-    ctx.fillRect(player.x, player.y, player.width, player.height)
+    if (imagesLoaded && rocketImageRef.current) {
+      // 이미지 사용
+      ctx.drawImage(rocketImageRef.current, player.x, player.y, player.width, player.height)
+    } else {
+      // 기본 그래픽 (fallback)
+      ctx.fillStyle = '#3b82f6'
+      ctx.fillRect(player.x, player.y, player.width, player.height)
+      
+      // 로켓 디테일
+      ctx.fillStyle = '#60a5fa'
+      ctx.fillRect(player.x + 5, player.y + 5, player.width - 10, player.height - 10)
+      
+      // 로켓 꼭대기
+      ctx.fillStyle = '#1d4ed8'
+      ctx.beginPath()
+      ctx.moveTo(player.x + player.width / 2, player.y)
+      ctx.lineTo(player.x + 5, player.y + 15)
+      ctx.lineTo(player.x + player.width - 5, player.y + 15)
+      ctx.closePath()
+      ctx.fill()
+    }
     
-    // 로켓 디테일
-    ctx.fillStyle = '#60a5fa'
-    ctx.fillRect(player.x + 5, player.y + 5, player.width - 10, player.height - 10)
-    
-    // 로켓 꼭대기
-    ctx.fillStyle = '#1d4ed8'
-    ctx.beginPath()
-    ctx.moveTo(player.x + player.width / 2, player.y)
-    ctx.lineTo(player.x + 5, player.y + 15)
-    ctx.lineTo(player.x + player.width - 5, player.y + 15)
-    ctx.closePath()
-    ctx.fill()
-    
-    // 낙하물 그리기 (레벨별 색상)
+    // 낙하물 그리기 (운석 이미지 또는 기본 그래픽)
     fallingObjectsRef.current.forEach(obj => {
-      let color = '#ef4444' // 기본 빨간색
-      
-      // 현재 레벨별 색상 변경
-      if (level >= 5) color = '#8b5cf6' // 보라색  
-      else if (level >= 3) color = '#f59e0b' // 주황색
-      
-      ctx.fillStyle = color
-      ctx.fillRect(obj.x, obj.y, obj.width, obj.height)
-      
-      // 테두리
-      ctx.strokeStyle = '#dc2626'
-      ctx.lineWidth = 2
-      ctx.strokeRect(obj.x, obj.y, obj.width, obj.height)
+      if (imagesLoaded && meteorImages.current.length > 0) {
+        // 레벨별 운석 이미지 선택
+        const meteorIndex = level >= 5 ? 2 : level >= 3 ? 1 : 0
+        const meteorImg = meteorImages.current[meteorIndex]
+        if (meteorImg) {
+          ctx.drawImage(meteorImg, obj.x, obj.y, obj.width, obj.height)
+        }
+      } else {
+        // 기본 그래픽 (fallback)
+        let color = '#ef4444' // 기본 빨간색
+        
+        // 현재 레벨별 색상 변경
+        if (level >= 5) color = '#8b5cf6' // 보라색  
+        else if (level >= 3) color = '#f59e0b' // 주황색
+        
+        ctx.fillStyle = color
+        ctx.fillRect(obj.x, obj.y, obj.width, obj.height)
+        
+        // 테두리
+        ctx.strokeStyle = '#dc2626'
+        ctx.lineWidth = 2
+        ctx.strokeRect(obj.x, obj.y, obj.width, obj.height)
+      }
     })
     
     // 레벨업 효과
@@ -213,39 +230,38 @@ const DodgeGame = () => {
       ctx.fillText('LEVEL UP!', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2)
     }
     
-  }, [gameState, score, level, levelUpEffect])
+  }, [gameState, score, level, levelUpEffect, imagesLoaded])
 
-  // 게임 루프
-  const gameLoop = useCallback((currentTime: number) => {
+  // 게임 루프 (RAF 중복 방지)
+  loopRef.current = (currentTime: number) => {
     if (gameState !== 'playing') return
-    
+
+    // 프레임 보정 (dt)
+    const dt = prevTimeRef.current ? (currentTime - prevTimeRef.current) / 16.6667 : 1
+    prevTimeRef.current = currentTime
+
+    // 시간 업데이트
     const elapsedTime = Math.floor((currentTime - startTimeRef.current) / 1000)
     setGameTime(elapsedTime)
-    
-    // 시간 업데이트 추적
-    if (elapsedTime !== lastTimeRef.current) {
-      lastTimeRef.current = elapsedTime
-    }
-    
+
+    // 레벨 체크 및 업데이트
     const newLevel = getCurrentLevel(score)
     if (newLevel !== level) {
       setLevel(newLevel)
       setLevelUpEffect(true)
-      setTimeout(() => setLevelUpEffect(false), 1000) // 1초 후 효과 제거
+      setTimeout(() => setLevelUpEffect(false), 1000)
     }
-    
+
     // 게임 로직 업데이트
     updatePlayer()
     spawnFallingObject()
-    updateFallingObjects()
+    updateFallingObjects(dt) // dt 전달
     checkCollisions()
-    
-    // 렌더링
     render()
-    
+
     // 다음 프레임 요청
-    gameLoopRef.current = requestAnimationFrame(gameLoop)
-  }, [gameState, score, level, updatePlayer, spawnFallingObject, updateFallingObjects, checkCollisions, render])
+    gameLoopRef.current = requestAnimationFrame(loopRef.current!)
+  }
 
   // 게임 시작
   const startGame = useCallback(() => {
@@ -318,18 +334,61 @@ const DodgeGame = () => {
     }
   }, [gameState, startGame, restartGame])
 
-  // 게임 루프 시작 처리
+  // RAF 시작/정리 (gameState만 의존하여 중복 방지)
   useEffect(() => {
     if (gameState === 'playing') {
-      gameLoopRef.current = requestAnimationFrame(gameLoop)
+      // 이전 RAF 무조건 취소
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current)
+      }
+      prevTimeRef.current = 0
+      gameLoopRef.current = requestAnimationFrame(loopRef.current!)
     }
     
     return () => {
-      if (gameLoopRef.current && gameState !== 'playing') {
+      if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current)
+        gameLoopRef.current = undefined
       }
     }
-  }, [gameState, gameLoop])
+  }, [gameState])
+
+  // 이미지 로딩
+  useEffect(() => {
+    const loadImages = async () => {
+      try {
+        // 로켓 이미지 로딩
+        const rocketImg = new Image()
+        rocketImg.src = '/rocket.svg'
+        await new Promise<void>((resolve) => {
+          rocketImg.onload = () => resolve()
+          rocketImg.onerror = () => resolve() // 에러 시에도 계속 진행
+        })
+        rocketImageRef.current = rocketImg
+
+        // 운석 이미지들 로딩
+        const meteorPaths = ['/meteor1.svg', '/meteor2.svg', '/meteor3.svg']
+        const meteorImgs = await Promise.all(
+          meteorPaths.map(path => {
+            const img = new Image()
+            img.src = path
+            return new Promise<HTMLImageElement>((resolve) => {
+              img.onload = () => resolve(img)
+              img.onerror = () => resolve(img) // 에러 시에도 계속 진행
+            })
+          })
+        )
+        meteorImages.current = meteorImgs
+        setImagesLoaded(true)
+        console.log('✅ 이미지 로딩 완료!')
+      } catch (error) {
+        console.warn('⚠️ 이미지 로딩 실패, 기본 그래픽 사용:', error)
+        setImagesLoaded(false)
+      }
+    }
+    
+    loadImages()
+  }, [])
 
   // 정적 렌더링 (게임이 시작되지 않았을 때)
   useEffect(() => {
