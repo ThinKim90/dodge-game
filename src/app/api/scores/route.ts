@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@vercel/postgres'
 
 // 메모리 캐시 (개발용 - 실제 서비스에서는 Redis 등 사용)
-const cache = new Map<string, { data: any; expires: number }>()
+interface CacheData {
+  data: any
+  expires: number
+}
+const cache = new Map<string, CacheData>()
 
 // 레이트 리밋 체크 (메모리 기반)
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+interface RateLimitData {
+  count: number
+  resetTime: number
+}
+const rateLimitMap = new Map<string, RateLimitData>()
 
 // 캐시 무효화 함수
 function invalidateCache(key: string) {
