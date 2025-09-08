@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@vercel/postgres'
-
-// 메모리 캐시 (개발용 - 실제 서비스에서는 Redis 등 사용)
-interface CacheData {
-  data: unknown
-  expires: number
-}
-const cache = new Map<string, CacheData>()
-
-// 캐시 무효화 함수
-function invalidateCache(key: string) {
-  cache.delete(key)
-  console.log(`캐시 무효화: ${key}`)
-}
+import { invalidateCache } from '@/lib/cache'
 
 // 레이트 리밋 체크 (메모리 기반)
 interface RateLimitData {
