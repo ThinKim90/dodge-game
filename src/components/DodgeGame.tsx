@@ -152,7 +152,6 @@ const DodgeGame = () => {
     for (const obj of fallingObjectsRef.current) {
       if (checkCollision(player, obj)) {
         setGameState('gameOver')
-        setShowModal(true) // 게임 오버 시 모달 표시
         return
       }
     }
@@ -471,67 +470,99 @@ const DodgeGame = () => {
       <div className="flex flex-col lg:flex-row items-start space-y-4 lg:space-y-0 lg:space-x-8 w-full max-w-7xl">
         {/* 게임 영역 */}
         <div className="flex flex-col items-center space-y-2 md:space-y-4 w-full lg:w-auto">
-          <canvas
-            ref={canvasRef}
-            width={GAME_CONFIG.CANVAS_WIDTH}
-            height={GAME_CONFIG.CANVAS_HEIGHT}
-            className="border-2 border-gray-600 bg-gray-800 rounded-lg max-w-full"
-            style={{ 
-              width: '100%', 
-              maxWidth: `${GAME_CONFIG.CANVAS_WIDTH}px`,
-              height: 'auto',
-              aspectRatio: `${GAME_CONFIG.CANVAS_WIDTH}/${GAME_CONFIG.CANVAS_HEIGHT}`
-            }}
-          />
+          {/* 캔버스와 오버레이 컨테이너 */}
+          <div className="relative">
+            <canvas
+              ref={canvasRef}
+              width={GAME_CONFIG.CANVAS_WIDTH}
+              height={GAME_CONFIG.CANVAS_HEIGHT}
+              className="border-2 border-gray-600 bg-gray-800 rounded-lg max-w-full"
+              style={{ 
+                width: '100%', 
+                maxWidth: `${GAME_CONFIG.CANVAS_WIDTH}px`,
+                height: 'auto',
+                aspectRatio: `${GAME_CONFIG.CANVAS_WIDTH}/${GAME_CONFIG.CANVAS_HEIGHT}`
+              }}
+            />
+            
+            {/* 게임 시작 오버레이 */}
+            {gameState === 'start' && (
+              <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg">
+                <div className="text-center text-white space-y-4 p-6">
+                  <h1 className="text-3xl md:text-4xl font-bold text-blue-400">🎮 피하기 게임</h1>
+                  <p className="text-gray-300 text-sm md:text-base">운석을 피해서 살아남으세요!</p>
+                  <div className="text-xs md:text-sm text-gray-400 space-y-1">
+                    <p>🖥️ 데스크톱: ← → 키로 이동</p>
+                    <p>📱 모바일: 화면 드래그 또는 버튼 터치</p>
+                  </div>
+                  <button
+                    onClick={startGame}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold transform hover:scale-105 transition-all text-sm md:text-base"
+                  >
+                    🚀 게임 시작 (Enter)
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* 게임 오버 오버레이 */}
+            {gameState === 'gameOver' && (
+              <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center rounded-lg">
+                <div className="text-center text-white space-y-4 p-6">
+                  <h2 className="text-2xl md:text-3xl font-bold text-red-400">💥 게임 오버!</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+                    <div className="bg-gray-800 rounded-lg p-3">
+                      <div className="text-xs text-gray-400">최종 점수</div>
+                      <div className="text-lg font-bold text-yellow-400">{score}</div>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3">
+                      <div className="text-xs text-gray-400">플레이 시간</div>
+                      <div className="text-lg font-bold text-blue-400">{gameTime}초</div>
+                    </div>
+                    <div className="bg-gray-800 rounded-lg p-3">
+                      <div className="text-xs text-gray-400">도달 레벨</div>
+                      <div className="text-lg font-bold text-green-400">{level}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                      onClick={restartGame}
+                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold transform hover:scale-105 transition-all text-sm md:text-base"
+                    >
+                      🔄 다시 시작 (Enter)
+                    </button>
+                    <button
+                      onClick={() => setShowModal(true)}
+                      className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 font-semibold transform hover:scale-105 transition-all text-sm md:text-base"
+                    >
+                      📋 점수 등록
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           
-          {/* 게임 정보 */}
+          {/* 게임 정보 - 더 컴팩트하게 */}
           {gameState === 'playing' && (
-            <div className="flex space-x-6 text-center text-white bg-gray-800 rounded-lg p-4">
+            <div className="flex space-x-3 text-center text-white bg-gray-800 rounded-lg p-2 text-sm">
               <div>
-                <div className="text-sm text-gray-400">시간</div>
-                <div className="text-lg font-bold">{gameTime}초</div>
+                <span className="text-gray-400">시간</span>
+                <span className="ml-1 font-bold">{gameTime}초</span>
               </div>
+              <div className="text-gray-600">|</div>
               <div>
-                <div className="text-sm text-gray-400">점수</div>
-                <div className="text-lg font-bold text-yellow-400">{score}</div>
+                <span className="text-gray-400">점수</span>
+                <span className="ml-1 font-bold text-yellow-400">{score}</span>
               </div>
+              <div className="text-gray-600">|</div>
               <div>
-                <div className="text-sm text-gray-400">레벨</div>
-                <div className="text-lg font-bold text-blue-400">{level}</div>
+                <span className="text-gray-400">레벨</span>
+                <span className="ml-1 font-bold text-blue-400">{level}</span>
               </div>
             </div>
           )}
           
-          {/* 게임 상태별 UI */}
-          {gameState === 'start' && (
-            <div className="text-center text-white space-y-4">
-              <h1 className="text-3xl font-bold text-blue-400">🎮 피하기 게임</h1>
-              <p className="text-gray-300">좌/우로 피하세요. 닿으면 끝!</p>
-              <button
-                onClick={startGame}
-                className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold transform hover:scale-105 transition-all"
-              >
-                🚀 게임 시작 (Enter)
-              </button>
-            </div>
-          )}
-          
-          {gameState === 'gameOver' && (
-            <div className="text-center text-white space-y-4">
-              <h2 className="text-2xl font-bold text-red-400">게임 오버!</h2>
-              <div className="text-gray-300">
-                <p>최종 점수: <span className="text-yellow-400 font-bold">{score}</span></p>
-                <p>플레이 시간: <span className="text-blue-400 font-bold">{gameTime}초</span></p>
-                <p>도달 레벨: <span className="text-green-400 font-bold">{level}</span></p>
-              </div>
-              <button
-                onClick={restartGame}
-                className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold transform hover:scale-105 transition-all"
-              >
-                🔄 다시 시작 (Enter)
-              </button>
-            </div>
-          )}
           
           {/* 모바일 터치 컨트롤 - 게임 바로 아래 고정 */}
           <div className="w-full md:hidden">
