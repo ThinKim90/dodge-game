@@ -3,7 +3,7 @@ import { sql } from '@vercel/postgres'
 
 // 메모리 캐시 (개발용 - 실제 서비스에서는 Redis 등 사용)
 interface CacheData {
-  data: any
+  data: unknown
   expires: number
 }
 const cache = new Map<string, CacheData>()
@@ -41,9 +41,21 @@ function checkRateLimit(ip: string): boolean {
   return true
 }
 
+// 입력 데이터 타입 정의
+interface ScoreInput {
+  nickname: string
+  score: number
+  duration: number
+  level: number
+}
+
 // 입력 검증 함수
-function validateInput(body: any) {
-  const { nickname, score, duration, level } = body
+function validateInput(body: unknown): { valid: boolean; error?: string; data?: ScoreInput } {
+  if (!body || typeof body !== 'object') {
+    return { valid: false, error: '잘못된 요청 형식입니다' }
+  }
+  
+  const { nickname, score, duration, level } = body as Record<string, unknown>
 
   if (!nickname || typeof nickname !== 'string') {
     return { valid: false, error: '닉네임이 필요합니다' }
@@ -53,19 +65,22 @@ function validateInput(body: any) {
     return { valid: false, error: '닉네임은 1-20자여야 합니다' }
   }
   
-  if (!Number.isInteger(score) || score < 0 || score > 1000000) {
+  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 1000000) {
     return { valid: false, error: '점수가 올바르지 않습니다' }
   }
   
-  if (!Number.isInteger(duration) || duration < 0 || duration > 86400) {
+  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 0 || duration > 86400) {
     return { valid: false, error: '플레이 시간이 올바르지 않습니다' }
   }
   
-  if (!Number.isInteger(level) || level < 1 || level > 1000) {
+  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 1000) {
     return { valid: false, error: '레벨이 올바르지 않습니다' }
   }
   
-  return { valid: true }
+  return { 
+    valid: true, 
+    data: { nickname, score, duration, level } as ScoreInput 
+  }
 }
 
 export async function POST(request: NextRequest) {

@@ -3,7 +3,7 @@ import { sql } from '@vercel/postgres'
 
 // 메모리 캐시 (개발용 - 실제 서비스에서는 Redis 등 사용)
 interface CacheData {
-  data: any
+  data: unknown
   expires: number
 }
 const cache = new Map<string, CacheData>()
@@ -18,7 +18,7 @@ function getFromCache(key: string) {
 }
 
 // 캐시에 데이터 저장 (5분)
-function setCache(key: string, data: any) {
+function setCache(key: string, data: unknown) {
   const expires = Date.now() + (5 * 60 * 1000) // 5분
   cache.set(key, { data, expires })
 }

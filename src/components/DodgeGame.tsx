@@ -46,7 +46,7 @@ const getSpeedMultiplier = (level: number): number => {
 
 const DodgeGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const gameLoopRef = useRef<number>()
+  const gameLoopRef = useRef<number | undefined>(undefined)
   const lastTimeRef = useRef<number>(0)
   
   // 게임 상태
@@ -210,7 +210,7 @@ const DodgeGame = () => {
       ctx.fillText('LEVEL UP!', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2)
     }
     
-  }, [gameState, score, level, levelUpEffect])
+  }, [gameState, score, levelUpEffect])
 
   // 게임 루프
   const gameLoop = useCallback((currentTime: number) => {

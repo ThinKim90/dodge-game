@@ -64,7 +64,7 @@ const ScoreSubmissionModal = ({
         setMessage(data.error || '점수 등록에 실패했습니다')
         setIsSuccess(false)
       }
-    } catch (error) {
+    } catch {
       setMessage('네트워크 오류가 발생했습니다')
       setIsSuccess(false)
     } finally {
