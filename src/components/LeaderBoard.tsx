@@ -10,16 +10,30 @@ interface Score {
   created_at: string
 }
 
-const LeaderBoard = () => {
+interface LeaderBoardProps {
+  key?: number // 새로고침을 위한 key prop
+}
+
+const LeaderBoard = ({ key }: LeaderBoardProps) => {
   const [scores, setScores] = useState<Score[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchScores = async () => {
+    setLoading(true)
     try {
-      const response = await fetch('/api/scores/top10')
+      console.log('리더보드 새로고침 시작...')
+      const response = await fetch('/api/scores/top10', {
+        cache: 'no-cache', // 캐시 무시
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       if (response.ok) {
         const data = await response.json()
+        console.log('리더보드 데이터:', data)
         setScores(data.scores || [])
+      } else {
+        console.error('리더보드 응답 오류:', response.status)
       }
     } catch (error) {
       console.error('리더보드 로드 실패:', error)
@@ -30,7 +44,7 @@ const LeaderBoard = () => {
 
   useEffect(() => {
     fetchScores()
-  }, [])
+  }, [key]) // key가 변경될 때마다 새로고침
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('ko-KR')
