@@ -8,17 +8,18 @@ interface CacheData {
 }
 const cache = new Map<string, CacheData>()
 
+// 캐시 무효화 함수
+function invalidateCache(key: string) {
+  cache.delete(key)
+  console.log(`캐시 무효화: ${key}`)
+}
+
 // 레이트 리밋 체크 (메모리 기반)
 interface RateLimitData {
   count: number
   resetTime: number
 }
 const rateLimitMap = new Map<string, RateLimitData>()
-
-// 캐시 무효화 함수
-function invalidateCache(key: string) {
-  cache.delete(key)
-}
 
 // IP 기반 레이트 리밋 (5req/min)
 function checkRateLimit(ip: string): boolean {

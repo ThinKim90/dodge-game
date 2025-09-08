@@ -3,14 +3,18 @@ import { sql } from '@vercel/postgres'
 
 export async function POST() {
   try {
+    // 기존 테이블 삭제 (주의: 모든 데이터 삭제됨)
+    await sql`DROP TABLE IF EXISTS scores`
+    
     // scores 테이블 생성
     await sql`
-      CREATE TABLE IF NOT EXISTS scores (
+      CREATE TABLE scores (
         id SERIAL PRIMARY KEY,
         nickname VARCHAR(12) NOT NULL,
         score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100000),
-        duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0),
+        duration INTEGER NOT NULL CHECK (duration >= 0),
         level INTEGER NOT NULL CHECK (level >= 1),
+        ip_address VARCHAR(45),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
     `
