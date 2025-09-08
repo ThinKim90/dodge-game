@@ -467,15 +467,21 @@ const DodgeGame = () => {
   }, [gameState, render])
 
   return (
-    <main className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-      <div className="flex flex-col lg:flex-row items-start space-y-6 lg:space-y-0 lg:space-x-8">
+    <main className="min-h-screen bg-gray-900 flex items-center justify-center p-2 md:p-4">
+      <div className="flex flex-col lg:flex-row items-start space-y-4 lg:space-y-0 lg:space-x-8 w-full max-w-7xl">
         {/* 게임 영역 */}
-        <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center space-y-2 md:space-y-4 w-full lg:w-auto">
           <canvas
             ref={canvasRef}
             width={GAME_CONFIG.CANVAS_WIDTH}
             height={GAME_CONFIG.CANVAS_HEIGHT}
-            className="border-2 border-gray-600 bg-gray-800 rounded-lg"
+            className="border-2 border-gray-600 bg-gray-800 rounded-lg max-w-full"
+            style={{ 
+              width: '100%', 
+              maxWidth: `${GAME_CONFIG.CANVAS_WIDTH}px`,
+              height: 'auto',
+              aspectRatio: `${GAME_CONFIG.CANVAS_WIDTH}/${GAME_CONFIG.CANVAS_HEIGHT}`
+            }}
           />
           
           {/* 게임 정보 */}
@@ -527,17 +533,15 @@ const DodgeGame = () => {
             </div>
           )}
           
-          {/* 모바일 컨트롤 */}
-          <div className="text-center text-gray-400 text-sm bg-gray-800 rounded-lg p-3">
-            <p className="mb-2">🖥️ 데스크톱: ← → 키로 이동 | 📱 모바일: 화면 드래그</p>
-            
+          {/* 모바일 터치 컨트롤 - 게임 바로 아래 고정 */}
+          <div className="w-full md:hidden">
             {/* 터치 디버그 정보 */}
-            <div className="text-xs text-green-400 mb-2 md:hidden">
+            <div className="text-xs text-green-400 mb-2 text-center">
               터치 상태: 왼쪽 {touchDebug.left ? '✅' : '❌'} | 오른쪽 {touchDebug.right ? '✅' : '❌'}
             </div>
             
             {/* 모바일 터치 버튼 */}
-            <div className="flex justify-center space-x-4 mt-3 md:hidden">
+            <div className="flex justify-center space-x-6 mb-2">
               <button
                 onTouchStart={(e) => {
                   e.preventDefault()
@@ -553,7 +557,7 @@ const DodgeGame = () => {
                 onMouseUp={() => {
                   touchRef.current.isMovingLeft = false
                 }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700 touch-manipulation"
+                className="w-20 h-16 bg-blue-600 text-white rounded-xl font-bold text-lg select-none active:bg-blue-700 touch-manipulation shadow-lg"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 ← 왼쪽
@@ -573,17 +577,27 @@ const DodgeGame = () => {
                 onMouseUp={() => {
                   touchRef.current.isMovingRight = false
                 }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-bold text-xl select-none active:bg-blue-700 touch-manipulation"
+                className="w-20 h-16 bg-blue-600 text-white rounded-xl font-bold text-lg select-none active:bg-blue-700 touch-manipulation shadow-lg"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 오른쪽 →
               </button>
             </div>
+            
+            {/* 모바일 조작 가이드 */}
+            <div className="text-center text-gray-400 text-xs bg-gray-800 rounded-lg p-2">
+              📱 화면 드래그 또는 버튼 터치로 이동
+            </div>
+          </div>
+          
+          {/* 데스크톱 컨트롤 가이드 */}
+          <div className="hidden md:block text-center text-gray-400 text-sm bg-gray-800 rounded-lg p-3">
+            🖥️ ← → 키로 이동 | Enter: 시작/재시작
           </div>
         </div>
         
         {/* 리더보드 */}
-        <div className="w-full lg:w-auto">
+        <div className="w-full lg:w-auto mt-4 lg:mt-0">
           <LeaderBoard key={leaderBoardKey} />
         </div>
       </div>
