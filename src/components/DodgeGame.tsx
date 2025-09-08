@@ -38,8 +38,8 @@ const getCurrentLevel = (score: number): number => {
   return Math.floor(score / GAME_CONFIG.LEVEL_UP_SCORE) + 1
 }
 
-// 속도 배율 계산 함수 (매우 부드러운 난이도 곡선)
-const getSpeedMultiplier = (level: number): number => {
+// 레벨 기반 속도 배율 계산 함수
+const getSpeedMultiplierByScore = (level: number): number => {
   // 제곱근 기반 + 더욱 완만한 증가율
   return 1 + Math.sqrt(level - 1) * 0.08
 }
@@ -97,8 +97,8 @@ const DodgeGame = () => {
     }
     
     if (Math.random() < GAME_CONFIG.SPAWN_RATE) {
-      const currentLevel = getCurrentLevel(score)
-      const speedMultiplier = getSpeedMultiplier(currentLevel)
+      // 현재 레벨(state)에 따라 속도 결정
+      const speedMultiplier = getSpeedMultiplierByScore(level)
       
       fallingObjectsRef.current.push({
         x: Math.random() * (GAME_CONFIG.CANVAS_WIDTH - GAME_CONFIG.FALLING_OBJECT_WIDTH),
@@ -108,12 +108,16 @@ const DodgeGame = () => {
         speed: GAME_CONFIG.INITIAL_FALLING_SPEED * speedMultiplier
       })
     }
-  }, [score])
+  }, [level])
 
-  // 낙하물 업데이트
+  // 낙하물 업데이트 (레벨에 따른 속도 동적 조절)
   const updateFallingObjects = useCallback(() => {
+    const currentSpeedMultiplier = getSpeedMultiplierByScore(level)
+    
     fallingObjectsRef.current = fallingObjectsRef.current.filter(obj => {
-      obj.y += obj.speed
+      // 현재 레벨에 맞는 속도로 이동 (동적 속도 조절)
+      const currentSpeed = GAME_CONFIG.INITIAL_FALLING_SPEED * currentSpeedMultiplier
+      obj.y += currentSpeed
       
       // 화면 아래로 벗어난 객체 제거 및 점수 증가
       if (obj.y > GAME_CONFIG.CANVAS_HEIGHT) {
@@ -123,7 +127,7 @@ const DodgeGame = () => {
       
       return true
     })
-  }, [])
+  }, [level])
 
   // 충돌 체크
   const checkCollisions = useCallback(() => {
@@ -183,12 +187,11 @@ const DodgeGame = () => {
     
     // 낙하물 그리기 (레벨별 색상)
     fallingObjectsRef.current.forEach(obj => {
-      const currentLevel = getCurrentLevel(score)
       let color = '#ef4444' // 기본 빨간색
       
-      // 레벨별 색상 변경
-      if (currentLevel >= 5) color = '#8b5cf6' // 보라색
-      else if (currentLevel >= 3) color = '#f59e0b' // 주황색
+      // 현재 레벨별 색상 변경
+      if (level >= 5) color = '#8b5cf6' // 보라색  
+      else if (level >= 3) color = '#f59e0b' // 주황색
       
       ctx.fillStyle = color
       ctx.fillRect(obj.x, obj.y, obj.width, obj.height)
@@ -210,7 +213,7 @@ const DodgeGame = () => {
       ctx.fillText('LEVEL UP!', GAME_CONFIG.CANVAS_WIDTH / 2, GAME_CONFIG.CANVAS_HEIGHT / 2)
     }
     
-  }, [gameState, score, levelUpEffect])
+  }, [gameState, score, level, levelUpEffect])
 
   // 게임 루프
   const gameLoop = useCallback((currentTime: number) => {
