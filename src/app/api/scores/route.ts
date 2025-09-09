@@ -142,26 +142,8 @@ async function getGameSession(sessionId: string): Promise<{
   }
 }
 
-// 🛡️ 핵심 게임 로직 검증 함수 (세션 데이터 기반)
-function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
-  // 레벨과 점수 일관성 검증 (20점마다 레벨업)
-  const expectedLevel = Math.floor(score / 20) + 1
-  const levelDiff = Math.abs(level - expectedLevel)
-  
-  if (levelDiff > 3) { // 3레벨 이상 차이나면 의심
-    return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
-  }
-
-  // 시간과 점수 일관성 검증
-  if (duration > 0) {
-    const scorePerSecond = score / duration
-    if (scorePerSecond > 10) { // 초당 10점 이상은 의심스러움
-      return { valid: false, error: '게임 시간 대비 점수가 비정상적입니다' }
-    }
-  }
-
-  return { valid: true }
-}
+// UUID 기반 시스템: 게임 로직 검증은 /api/game/complete에서 이미 완료
+// 여기서는 검증된 세션 데이터만 조회하면 됨 (중복 검증 제거로 성능 최적화)
 
 export async function POST(request: NextRequest) {
   try {
@@ -213,17 +195,10 @@ export async function POST(request: NextRequest) {
     const sessionData = sessionResult.sessionData!
     const { score, level, duration } = sessionData
 
-    // 3. 게임 로직 재검증 (세션 데이터 기반)
-    const gameValidation = validateGameLogic(score, level, duration)
-    if (!gameValidation.valid) {
-      console.log('❌ 세션 데이터 게임 로직 검증 실패:', gameValidation.error)
-      return NextResponse.json(
-        { error: gameValidation.error },
-        { status: 400 }
-      )
-    }
+    // 게임 로직은 /api/game/complete에서 이미 검증 완료 ✅
+    // UUID 기반 시스템에서는 중복 검증 불필요 (성능 최적화)
 
-    console.log('✅ 모든 검증 통과 - UUID 기반 점수 저장 진행')
+    console.log('✅ 검증된 게임 세션 데이터 확인 - UUID 기반 점수 저장 진행')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
