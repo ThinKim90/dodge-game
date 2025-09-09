@@ -7,6 +7,8 @@ interface ScoreSubmissionModalProps {
   score: number
   gameTime: number
   level: number
+  gameSessionId: string | null
+  isSubmittingGameSession: boolean
   onClose: () => void
   onSubmitSuccess: () => void
 }
@@ -16,6 +18,8 @@ const ScoreSubmissionModal = ({
   score,
   gameTime,
   level,
+  gameSessionId,
+  isSubmittingGameSession,
   onClose,
   onSubmitSuccess
 }: ScoreSubmissionModalProps) => {
@@ -32,10 +36,17 @@ const ScoreSubmissionModal = ({
       return
     }
 
+    if (!gameSessionId) {
+      setMessage('게임 세션이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
+
     setIsSubmitting(true)
     setMessage('')
 
     try {
+      console.log('🛡️ UUID 기반 점수 제출:', { nickname: nickname.trim(), sessionId: gameSessionId })
+      
       const response = await fetch('/api/scores', {
         method: 'POST',
         headers: {
@@ -43,9 +54,7 @@ const ScoreSubmissionModal = ({
         },
         body: JSON.stringify({
           nickname: nickname.trim(),
-          score,
-          duration: gameTime,
-          level
+          sessionId: gameSessionId
         })
       })
 
@@ -106,51 +115,78 @@ const ScoreSubmissionModal = ({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="nickname" className="block text-sm font-medium text-gray-300 mb-2">
-              닉네임 (최대 12자)
-            </label>
-            <input
-              type="text"
-              id="nickname"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="닉네임을 입력하세요"
-              maxLength={12}
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="flex space-x-3">
+        {/* 게임 세션 저장 중이거나 준비되지 않은 경우 */}
+        {(isSubmittingGameSession || !gameSessionId) && (
+          <div className="text-center space-y-4">
+            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+            <div className="text-yellow-400 text-sm">
+              {isSubmittingGameSession ? '🔒 게임 데이터 보안 검증 중...' : '⏳ 게임 세션 준비 중...'}
+            </div>
+            <div className="text-gray-400 text-xs">
+              부정행위 방지를 위해 게임 데이터를 안전하게 저장하고 있습니다
+            </div>
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-              disabled={isSubmitting}
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
             >
-              취소
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-500"
-              disabled={isSubmitting || !nickname.trim()}
-            >
-              {isSubmitting ? '등록 중...' : '등록하기'}
+              닫기
             </button>
           </div>
+        )}
 
-          {message && (
-            <div className={`text-center text-sm p-3 rounded-md ${
-              isSuccess 
-                ? 'bg-green-900 text-green-300 border border-green-700' 
-                : 'bg-red-900 text-red-300 border border-red-700'
-            }`}>
-              {message}
+        {/* 게임 세션이 준비된 경우 닉네임 입력 폼 */}
+        {!isSubmittingGameSession && gameSessionId && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="text-center text-green-400 text-sm mb-4">
+              ✅ 게임 데이터가 안전하게 저장되었습니다
             </div>
-          )}
-        </form>
+            
+            <div>
+              <label htmlFor="nickname" className="block text-sm font-medium text-gray-300 mb-2">
+                닉네임 (최대 12자)
+              </label>
+              <input
+                type="text"
+                id="nickname"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="닉네임을 입력하세요"
+                maxLength={12}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                disabled={isSubmitting}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-500"
+                disabled={isSubmitting || !nickname.trim()}
+              >
+                {isSubmitting ? '등록 중...' : '등록하기'}
+              </button>
+            </div>
+
+            {message && (
+              <div className={`text-center text-sm p-3 rounded-md ${
+                isSuccess 
+                  ? 'bg-green-900 text-green-300 border border-green-700' 
+                  : 'bg-red-900 text-red-300 border border-red-700'
+              }`}>
+                {message}
+              </div>
+            )}
+          </form>
+        )}
       </div>
     </div>
   )

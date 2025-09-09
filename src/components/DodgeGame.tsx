@@ -65,6 +65,8 @@ const DodgeGame = () => {
   const [levelUpEffect, setLevelUpEffect] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false)
   const [touchDebug, setTouchDebug] = useState({ left: false, right: false })
+  const [gameSessionId, setGameSessionId] = useState<string | null>(null) // 게임 세션 UUID
+  const [isSubmittingGameSession, setIsSubmittingGameSession] = useState(false) // 게임 세션 저장 중
   
   // 게임 오브젝트
   const playerRef = useRef<GameObject>({
@@ -151,6 +153,44 @@ const DodgeGame = () => {
   }, [])
 
 
+  // 게임 완료 시 세션 저장
+  const submitGameSession = useCallback(async (finalScore: number, finalLevel: number, finalDuration: number) => {
+    if (isSubmittingGameSession) return // 중복 요청 방지
+    
+    setIsSubmittingGameSession(true)
+    
+    try {
+      console.log('🎮 게임 완료 - 서버에 세션 저장 중...', { finalScore, finalLevel, finalDuration })
+      
+      const response = await fetch('/api/game/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          score: finalScore,
+          level: finalLevel,
+          duration: finalDuration
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data.sessionId) {
+        setGameSessionId(data.sessionId)
+        console.log('✅ 게임 세션 저장 성공:', data.sessionId)
+      } else {
+        console.error('❌ 게임 세션 저장 실패:', data.error)
+        setGameSessionId(null)
+      }
+    } catch (error) {
+      console.error('❌ 게임 세션 저장 네트워크 오류:', error)
+      setGameSessionId(null)
+    } finally {
+      setIsSubmittingGameSession(false)
+    }
+  }, [isSubmittingGameSession])
+
   // 충돌 체크
   const checkCollisions = useCallback(() => {
     const player = playerRef.current
@@ -158,10 +198,15 @@ const DodgeGame = () => {
     for (const obj of fallingObjectsRef.current) {
       if (checkCollision(player, obj)) {
         setGameState('gameOver')
+        
+        // 게임 오버 시 즉시 세션 저장
+        const currentTime = Math.floor((performance.now() - startTimeRef.current) / 1000)
+        submitGameSession(score, level, currentTime)
+        
         return
       }
     }
-  }, [])
+  }, [score, level, submitGameSession])
 
   // 게임 렌더링 (개선된 그래픽)
   const render = useCallback(() => {
@@ -290,6 +335,8 @@ const DodgeGame = () => {
     setLevel(1)
     setGameTime(0)
     setLevelUpEffect(false)
+    setGameSessionId(null) // 세션 ID 초기화
+    setIsSubmittingGameSession(false) // 세션 저장 상태 초기화
     
     // 게임 오브젝트 초기화
     playerRef.current.x = GAME_CONFIG.CANVAS_WIDTH / 2 - GAME_CONFIG.PLAYER_WIDTH / 2
@@ -647,6 +694,8 @@ const DodgeGame = () => {
         score={score}
         gameTime={gameTime}
         level={level}
+        gameSessionId={gameSessionId}
+        isSubmittingGameSession={isSubmittingGameSession}
         onClose={handleCloseModal}
         onSubmitSuccess={handleSubmitSuccess}
       />

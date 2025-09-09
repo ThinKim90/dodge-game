@@ -30,21 +30,19 @@ function checkRateLimit(ip: string): boolean {
   return true
 }
 
-// 입력 데이터 타입 정의
-interface ScoreInput {
+// 입력 데이터 타입 정의 (UUID 기반)
+interface ScoreSubmissionInput {
   nickname: string
-  score: number
-  duration: number
-  level: number
+  sessionId: string
 }
 
-// 입력 검증 함수
-function validateInput(body: unknown): { valid: boolean; error?: string; data?: ScoreInput } {
+// 입력 검증 함수 (UUID 기반)
+function validateInput(body: unknown): { valid: boolean; error?: string; data?: ScoreSubmissionInput } {
   if (!body || typeof body !== 'object') {
     return { valid: false, error: '잘못된 요청 형식입니다' }
   }
   
-  const { nickname, score, duration, level } = body as Record<string, unknown>
+  const { nickname, sessionId } = body as Record<string, unknown>
 
   // 닉네임 검증
   if (!nickname || typeof nickname !== 'string') {
@@ -55,28 +53,96 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
     return { valid: false, error: '닉네임은 1-12자 사이여야 합니다' }
   }
   
-  // 점수 검증
-  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100000) {
-    return { valid: false, error: '점수가 올바르지 않습니다' }
+  // 세션 ID 검증
+  if (!sessionId || typeof sessionId !== 'string') {
+    return { valid: false, error: '게임 세션 ID가 필요합니다' }
   }
   
-  // 시간 검증
-  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 0 || duration > 3600) {
-    return { valid: false, error: '플레이 시간이 올바르지 않습니다 (최대 1시간)' }
-  }
-  
-  // 레벨 검증
-  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 500) {
-    return { valid: false, error: '레벨이 올바르지 않습니다' }
+  // UUID 형식 검증 (간단한 형식 체크)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(sessionId)) {
+    return { valid: false, error: '잘못된 세션 ID 형식입니다' }
   }
   
   return { 
     valid: true, 
-    data: { nickname, score, duration, level } as ScoreInput 
+    data: { nickname: nickname.trim(), sessionId } as ScoreSubmissionInput 
   }
 }
 
-// 🛡️ 핵심 게임 로직 검증 함수
+// 게임 세션 조회 및 검증 함수
+async function getGameSession(sessionId: string): Promise<{
+  valid: boolean
+  error?: string
+  sessionData?: {
+    id: number
+    score: number
+    level: number
+    duration: number
+    ip_address: string
+    is_used: boolean
+    created_at: string
+  }
+}> {
+  if (!process.env.POSTGRES_URL) {
+    // Mock 모드 - 테스트용 가짜 데이터 반환
+    console.log('🧪 Mock: 게임 세션 조회 (가짜 데이터)')
+    return {
+      valid: true,
+      sessionData: {
+        id: 1,
+        score: Math.floor(Math.random() * 100),
+        level: Math.floor(Math.random() * 10) + 1,
+        duration: Math.floor(Math.random() * 300) + 10,
+        ip_address: '127.0.0.1',
+        is_used: false,
+        created_at: new Date().toISOString()
+      }
+    }
+  }
+
+  try {
+    const result = await sql`
+      SELECT id, score, level, duration, ip_address, is_used, created_at
+      FROM game_sessions 
+      WHERE session_id = ${sessionId}
+    `
+    
+    if (result.rows.length === 0) {
+      return { valid: false, error: '게임 세션을 찾을 수 없습니다' }
+    }
+    
+    const session = result.rows[0] as {
+      id: number
+      score: number
+      level: number
+      duration: number
+      ip_address: string
+      is_used: boolean
+      created_at: string
+    }
+    
+    // 세션이 이미 사용되었는지 확인 (중복 등록 방지)
+    if (session.is_used) {
+      return { valid: false, error: '이미 등록된 게임 세션입니다' }
+    }
+    
+    // 세션이 너무 오래된 경우 (24시간 이상)
+    const sessionAge = Date.now() - new Date(session.created_at).getTime()
+    const maxAge = 24 * 60 * 60 * 1000 // 24시간
+    if (sessionAge > maxAge) {
+      return { valid: false, error: '만료된 게임 세션입니다' }
+    }
+    
+    return { valid: true, sessionData: session }
+    
+  } catch (error) {
+    console.error('게임 세션 조회 오류:', error)
+    return { valid: false, error: '게임 세션 조회 중 오류가 발생했습니다' }
+  }
+}
+
+// 🛡️ 핵심 게임 로직 검증 함수 (세션 데이터 기반)
 function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
   // 레벨과 점수 일관성 검증 (20점마다 레벨업)
   const expectedLevel = Math.floor(score / 20) + 1
@@ -86,28 +152,15 @@ function validateGameLogic(score: number, level: number, duration: number): { va
     return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
   }
 
+  // 시간과 점수 일관성 검증
+  if (duration > 0) {
+    const scorePerSecond = score / duration
+    if (scorePerSecond > 10) { // 초당 10점 이상은 의심스러움
+      return { valid: false, error: '게임 시간 대비 점수가 비정상적입니다' }
+    }
+  }
+
   return { valid: true }
-}
-
-// 중복 제출 방지 체크
-async function checkDuplicateSubmission(ip: string, score: number): Promise<boolean> {
-  if (!process.env.POSTGRES_URL) {
-    return false // Mock 모드에서는 중복 체크 안함
-  }
-
-  try {
-    const result = await sql`
-      SELECT COUNT(*) as count FROM scores 
-      WHERE ip_address = ${ip} 
-      AND score = ${score}
-      AND created_at > NOW() - INTERVAL '2 minutes'
-    `
-    
-    return parseInt(result.rows[0].count) > 0
-  } catch (error) {
-    console.error('중복 체크 오류:', error)
-    return false // 오류 시에는 통과시킴
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -129,11 +182,9 @@ export async function POST(request: NextRequest) {
 
     // 요청 본문 파싱
     const body = await request.json()
-    console.log('🛡️ 보안 강화된 점수 제출:', { 
+    console.log('🛡️ UUID 기반 보안 점수 제출:', { 
       nickname: body.nickname, 
-      score: body.score, 
-      level: body.level, 
-      duration: body.duration, 
+      sessionId: body.sessionId, 
       ip 
     })
 
@@ -147,40 +198,56 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { nickname, score, duration, level } = validation.data!
+    const { nickname, sessionId } = validation.data!
 
-    // 2. 게임 로직 검증
+    // 2. 게임 세션 조회 및 검증
+    const sessionResult = await getGameSession(sessionId)
+    if (!sessionResult.valid) {
+      console.log('❌ 게임 세션 검증 실패:', sessionResult.error)
+      return NextResponse.json(
+        { error: sessionResult.error },
+        { status: 400 }
+      )
+    }
+
+    const sessionData = sessionResult.sessionData!
+    const { score, level, duration } = sessionData
+
+    // 3. 게임 로직 재검증 (세션 데이터 기반)
     const gameValidation = validateGameLogic(score, level, duration)
     if (!gameValidation.valid) {
-      console.log('❌ 게임 로직 검증 실패:', gameValidation.error)
+      console.log('❌ 세션 데이터 게임 로직 검증 실패:', gameValidation.error)
       return NextResponse.json(
         { error: gameValidation.error },
         { status: 400 }
       )
     }
 
-    // 3. 중복 제출 체크
-    const isDuplicate = await checkDuplicateSubmission(ip, score)
-    if (isDuplicate) {
-      console.log('❌ 중복 제출 감지:', { ip, score })
-      return NextResponse.json(
-        { error: '이미 등록된 점수입니다.' },
-        { status: 409 }
-      )
-    }
-
-    console.log('✅ 모든 검증 통과 - 점수 저장 진행')
+    console.log('✅ 모든 검증 통과 - UUID 기반 점수 저장 진행')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
       try {
-        const result = await sql`
-          INSERT INTO scores (nickname, score, level, duration, ip_address, created_at)
-          VALUES (${nickname.trim()}, ${score}, ${level}, ${duration}, ${ip}, NOW())
-          RETURNING id, nickname, score, level, created_at
+        // 트랜잭션으로 처리 (점수 저장 + 세션 사용 표시)
+        await sql`BEGIN`
+        
+        // 1. 점수 저장
+        const scoreResult = await sql`
+          INSERT INTO scores (nickname, session_id, score, level, duration, ip_address, created_at)
+          VALUES (${nickname}, ${sessionId}, ${score}, ${level}, ${duration}, ${ip}, NOW())
+          RETURNING id, nickname, score, level, duration, created_at
         `
         
-        console.log('✅ 검증된 점수 저장 성공:', result.rows[0])
+        // 2. 게임 세션을 사용됨으로 표시
+        await sql`
+          UPDATE game_sessions 
+          SET is_used = true 
+          WHERE session_id = ${sessionId}
+        `
+        
+        await sql`COMMIT`
+        
+        console.log('✅ UUID 기반 점수 저장 성공:', scoreResult.rows[0])
         
         // 캐시 무효화
         invalidateCache('leaderboard:top10')
@@ -188,9 +255,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: '점수가 성공적으로 등록되었습니다!',
-          data: result.rows[0]
+          data: scoreResult.rows[0]
         })
       } catch (dbError) {
+        await sql`ROLLBACK`
         console.error('❌ 데이터베이스 오류:', dbError)
         return NextResponse.json(
           { error: '데이터베이스 오류가 발생했습니다' },
@@ -199,7 +267,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Mock 응답 (개발용)
-      console.log('🧪 Mock: 검증된 게임 데이터로 가짜 응답 반환')
+      console.log('🧪 Mock: UUID 기반 가짜 응답 반환')
       
       // 캐시 무효화
       invalidateCache('leaderboard:top10')
@@ -209,16 +277,17 @@ export async function POST(request: NextRequest) {
         message: '점수가 성공적으로 등록되었습니다! (개발 모드)',
         data: {
           id: Math.floor(Math.random() * 1000),
-          nickname: nickname.trim(),
+          nickname,
           score,
           level,
+          duration,
           created_at: new Date().toISOString()
         }
       })
     }
 
   } catch (error) {
-    console.error('❌ 점수 제출 오류:', error)
+    console.error('❌ UUID 기반 점수 제출 오류:', error)
     return NextResponse.json(
       { error: '서버 오류가 발생했습니다' },
       { status: 500 }
