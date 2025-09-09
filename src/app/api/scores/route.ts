@@ -61,8 +61,8 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
   }
   
   // 시간 검증
-  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 1 || duration > 3600) {
-    return { valid: false, error: '플레이 시간이 올바르지 않습니다 (1초~1시간)' }
+  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 0 || duration > 3600) {
+    return { valid: false, error: '플레이 시간이 올바르지 않습니다 (최대 1시간)' }
   }
   
   // 레벨 검증
@@ -78,17 +78,12 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
 
 // 🛡️ 핵심 게임 로직 검증 함수
 function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
-  // 1. 레벨과 점수 일관성 검증 (20점마다 레벨업)
+  // 레벨과 점수 일관성 검증 (20점마다 레벨업)
   const expectedLevel = Math.floor(score / 20) + 1
   const levelDiff = Math.abs(level - expectedLevel)
   
   if (levelDiff > 3) { // 3레벨 이상 차이나면 의심
     return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
-  }
-
-  // 2. 최소 플레이 시간 검증
-  if (duration < 3) {
-    return { valid: false, error: '게임 시간이 너무 짧습니다' }
   }
 
   return { valid: true }
