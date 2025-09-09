@@ -8,15 +8,15 @@ import ScoreSubmissionModal from './ScoreSubmissionModal'
 const GAME_CONFIG = {
   CANVAS_WIDTH: 400,
   CANVAS_HEIGHT: 600,
-  PLAYER_WIDTH: 24,
-  PLAYER_HEIGHT: 40,
+  PLAYER_WIDTH: 22,
+  PLAYER_HEIGHT: 32,
   PLAYER_SPEED: 6,
-  FALLING_OBJECT_WIDTH: 30,
-  FALLING_OBJECT_HEIGHT: 30,
+  FALLING_OBJECT_WIDTH: 28,
+  FALLING_OBJECT_HEIGHT: 28,
   INITIAL_FALLING_SPEED: 5.25,
   SPAWN_RATE: 0.0525,
   MAX_FALLING_OBJECTS: 22,
-  LEVEL_UP_SCORE: 18 // 18점마다 레벨업
+  LEVEL_UP_SCORE: 20 // 20점마다 레벨업
 }
 
 // 타입 정의
@@ -149,6 +149,7 @@ const DodgeGame = () => {
       return true
     })
   }, [])
+
 
   // 충돌 체크
   const checkCollisions = useCallback(() => {
@@ -515,6 +516,8 @@ const DodgeGame = () => {
               <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center rounded-lg">
                 <div className="text-center text-white space-y-4 p-6">
                   <h2 className="text-2xl md:text-3xl font-bold text-red-400">💥 게임 오버!</h2>
+                  
+                  
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
                     <div className="bg-gray-800 rounded-lg p-3">
                       <div className="text-xs text-gray-400">최종 점수</div>

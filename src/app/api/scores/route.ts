@@ -9,11 +9,11 @@ interface RateLimitData {
 }
 const rateLimitMap = new Map<string, RateLimitData>()
 
-// IP 기반 레이트 리밋 (5req/min)
+// IP 기반 레이트 리밋 (3req/min) - 더 엄격하게
 function checkRateLimit(ip: string): boolean {
   const now = Date.now()
   const windowMs = 60 * 1000 // 1분
-  const limit = 5
+  const limit = 3 // 더 엄격한 제한
 
   const current = rateLimitMap.get(ip)
   
@@ -46,29 +46,86 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
   
   const { nickname, score, duration, level } = body as Record<string, unknown>
 
+  // 닉네임 검증
   if (!nickname || typeof nickname !== 'string') {
     return { valid: false, error: '닉네임이 필요합니다' }
   }
   
-  if (nickname.trim().length === 0 || nickname.trim().length > 20) {
-    return { valid: false, error: '닉네임은 1-20자여야 합니다' }
+  if (nickname.trim().length === 0 || nickname.trim().length > 12) {
+    return { valid: false, error: '닉네임은 1-12자 사이여야 합니다' }
   }
   
-  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 1000000) {
+  // 점수 검증
+  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100000) {
     return { valid: false, error: '점수가 올바르지 않습니다' }
   }
   
-  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 0 || duration > 86400) {
-    return { valid: false, error: '플레이 시간이 올바르지 않습니다' }
+  // 시간 검증
+  if (typeof duration !== 'number' || !Number.isInteger(duration) || duration < 1 || duration > 3600) {
+    return { valid: false, error: '플레이 시간이 올바르지 않습니다 (1초~1시간)' }
   }
   
-  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 1000) {
+  // 레벨 검증
+  if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 500) {
     return { valid: false, error: '레벨이 올바르지 않습니다' }
   }
   
   return { 
     valid: true, 
     data: { nickname, score, duration, level } as ScoreInput 
+  }
+}
+
+// 🛡️ 핵심 게임 로직 검증 함수
+function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
+  // 1. 상식적 점수 증가율 검증
+  const maxScorePerSecond = 3 // 초당 최대 3점
+  const scorePerSecond = score / duration
+  
+  if (scorePerSecond > maxScorePerSecond) {
+    return { valid: false, error: '점수 증가율이 비정상적입니다' }
+  }
+
+  // 2. 레벨과 점수 일관성 검증 (20점마다 레벨업)
+  const expectedLevel = Math.floor(score / 20) + 1
+  const levelDiff = Math.abs(level - expectedLevel)
+  
+  if (levelDiff > 3) { // 3레벨 이상 차이나면 의심
+    return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
+  }
+
+  // 3. 최소 플레이 시간 검증
+  if (duration < 3) {
+    return { valid: false, error: '게임 시간이 너무 짧습니다' }
+  }
+
+  // 4. 점수 대비 적절한 플레이 시간 검증
+  const minExpectedTime = Math.max(score / 2, 5) // 최소 예상 시간
+  if (duration < minExpectedTime && score > 20) {
+    return { valid: false, error: '플레이 시간이 점수에 비해 너무 짧습니다' }
+  }
+
+  return { valid: true }
+}
+
+// 중복 제출 방지 체크
+async function checkDuplicateSubmission(ip: string, score: number): Promise<boolean> {
+  if (!process.env.POSTGRES_URL) {
+    return false // Mock 모드에서는 중복 체크 안함
+  }
+
+  try {
+    const result = await sql`
+      SELECT COUNT(*) as count FROM scores 
+      WHERE ip_address = ${ip} 
+      AND score = ${score}
+      AND created_at > NOW() - INTERVAL '2 minutes'
+    `
+    
+    return parseInt(result.rows[0].count) > 0
+  } catch (error) {
+    console.error('중복 체크 오류:', error)
+    return false // 오류 시에는 통과시킴
   }
 }
 
@@ -91,19 +148,47 @@ export async function POST(request: NextRequest) {
 
     // 요청 본문 파싱
     const body = await request.json()
-    console.log('점수 제출 요청:', { ...body, ip })
+    console.log('🛡️ 보안 강화된 점수 제출:', { 
+      nickname: body.nickname, 
+      score: body.score, 
+      level: body.level, 
+      duration: body.duration, 
+      ip 
+    })
 
-    // 입력 검증
+    // 1. 기본 입력 검증
     const validation = validateInput(body)
     if (!validation.valid) {
-      console.log('입력 검증 실패:', validation.error)
+      console.log('❌ 입력 검증 실패:', validation.error)
       return NextResponse.json(
         { error: validation.error },
         { status: 400 }
       )
     }
 
-    const { nickname, score, duration, level } = body
+    const { nickname, score, duration, level } = validation.data!
+
+    // 2. 게임 로직 검증
+    const gameValidation = validateGameLogic(score, level, duration)
+    if (!gameValidation.valid) {
+      console.log('❌ 게임 로직 검증 실패:', gameValidation.error)
+      return NextResponse.json(
+        { error: gameValidation.error },
+        { status: 400 }
+      )
+    }
+
+    // 3. 중복 제출 체크
+    const isDuplicate = await checkDuplicateSubmission(ip, score)
+    if (isDuplicate) {
+      console.log('❌ 중복 제출 감지:', { ip, score })
+      return NextResponse.json(
+        { error: '이미 등록된 점수입니다.' },
+        { status: 409 }
+      )
+    }
+
+    console.log('✅ 모든 검증 통과 - 점수 저장 진행')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
@@ -114,7 +199,7 @@ export async function POST(request: NextRequest) {
           RETURNING id, nickname, score, level, created_at
         `
         
-        console.log('점수 저장 성공:', result.rows[0])
+        console.log('✅ 검증된 점수 저장 성공:', result.rows[0])
         
         // 캐시 무효화
         invalidateCache('leaderboard:top10')
@@ -125,7 +210,7 @@ export async function POST(request: NextRequest) {
           data: result.rows[0]
         })
       } catch (dbError) {
-        console.error('데이터베이스 오류:', dbError)
+        console.error('❌ 데이터베이스 오류:', dbError)
         return NextResponse.json(
           { error: '데이터베이스 오류가 발생했습니다' },
           { status: 500 }
@@ -133,7 +218,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Mock 응답 (개발용)
-      console.log('Mock: 데이터베이스가 연결되지 않아 가짜 응답을 반환합니다')
+      console.log('🧪 Mock: 검증된 게임 데이터로 가짜 응답 반환')
       
       // 캐시 무효화
       invalidateCache('leaderboard:top10')
@@ -152,7 +237,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('점수 제출 오류:', error)
+    console.error('❌ 점수 제출 오류:', error)
     return NextResponse.json(
       { error: '서버 오류가 발생했습니다' },
       { status: 500 }

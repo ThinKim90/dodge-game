@@ -109,48 +109,47 @@ const ScoreSubmissionModal = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="nickname" className="block text-sm font-medium text-gray-300 mb-2">
-              닉네임
+              닉네임 (최대 12자)
             </label>
             <input
               type="text"
               id="nickname"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              maxLength={20}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="닉네임을 입력하세요"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isSubmitting || isSuccess}
+              maxLength={12}
+              disabled={isSubmitting}
             />
-            <div className="text-xs text-gray-500 mt-1">
-              최대 20자까지 입력 가능합니다
-            </div>
           </div>
-
-          {message && (
-            <div className={`text-sm text-center p-2 rounded ${
-              isSuccess ? 'text-green-400 bg-green-900/20' : 'text-red-400 bg-red-900/20'
-            }`}>
-              {message}
-            </div>
-          )}
 
           <div className="flex space-x-3">
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+              className="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
               disabled={isSubmitting}
             >
               취소
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || isSuccess}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed transition-colors"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-500"
+              disabled={isSubmitting || !nickname.trim()}
             >
-              {isSubmitting ? '등록 중...' : isSuccess ? '등록 완료!' : '등록하기'}
+              {isSubmitting ? '등록 중...' : '등록하기'}
             </button>
           </div>
+
+          {message && (
+            <div className={`text-center text-sm p-3 rounded-md ${
+              isSuccess 
+                ? 'bg-green-900 text-green-300 border border-green-700' 
+                : 'bg-red-900 text-red-300 border border-red-700'
+            }`}>
+              {message}
+            </div>
+          )}
         </form>
       </div>
     </div>
