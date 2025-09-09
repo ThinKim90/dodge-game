@@ -78,15 +78,7 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
 
 // 🛡️ 핵심 게임 로직 검증 함수
 function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
-  // 1. 상식적 점수 증가율 검증
-  const maxScorePerSecond = 3 // 초당 최대 3점
-  const scorePerSecond = score / duration
-  
-  if (scorePerSecond > maxScorePerSecond) {
-    return { valid: false, error: '점수 증가율이 비정상적입니다' }
-  }
-
-  // 2. 레벨과 점수 일관성 검증 (20점마다 레벨업)
+  // 1. 레벨과 점수 일관성 검증 (20점마다 레벨업)
   const expectedLevel = Math.floor(score / 20) + 1
   const levelDiff = Math.abs(level - expectedLevel)
   
@@ -94,15 +86,9 @@ function validateGameLogic(score: number, level: number, duration: number): { va
     return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
   }
 
-  // 3. 최소 플레이 시간 검증
+  // 2. 최소 플레이 시간 검증
   if (duration < 3) {
     return { valid: false, error: '게임 시간이 너무 짧습니다' }
-  }
-
-  // 4. 점수 대비 적절한 플레이 시간 검증
-  const minExpectedTime = Math.max(score / 2, 5) // 최소 예상 시간
-  if (duration < minExpectedTime && score > 20) {
-    return { valid: false, error: '플레이 시간이 점수에 비해 너무 짧습니다' }
   }
 
   return { valid: true }
