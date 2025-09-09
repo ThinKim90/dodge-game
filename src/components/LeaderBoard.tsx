@@ -17,6 +17,7 @@ interface LeaderBoardProps {
 const LeaderBoard = ({ key }: LeaderBoardProps) => {
   const [scores, setScores] = useState<Score[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const fetchScores = async () => {
     setLoading(true)
@@ -39,6 +40,31 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
       console.error('리더보드 로드 실패:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 강제 새로고침 (캐시 무효화 + 데이터 재로드)
+  const handleForceRefresh = async () => {
+    if (refreshing) return
+    
+    setRefreshing(true)
+    try {
+      console.log('🔄 강제 새로고침 시작 - 캐시 무효화 중...')
+      
+      // 1. 캐시 무효화
+      await fetch('/api/cache/clear', {
+        method: 'POST'
+      })
+      
+      // 2. 잠시 대기 후 데이터 재로드
+      setTimeout(() => {
+        fetchScores()
+        setRefreshing(false)
+      }, 500)
+      
+    } catch (error) {
+      console.error('강제 새로고침 실패:', error)
+      setRefreshing(false)
     }
   }
 
@@ -70,9 +96,21 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 w-full max-w-md">
-      <h3 className="text-lg font-bold text-white mb-4 text-center">
-        🏆 리더보드
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-white">
+          🏆 리더보드
+        </h3>
+        <button
+          onClick={handleForceRefresh}
+          disabled={refreshing || loading}
+          className="p-2 text-gray-400 hover:text-white disabled:text-gray-600 transition-colors"
+          title="강제 새로고침 (캐시 무효화)"
+        >
+          <span className={`text-sm ${refreshing ? 'animate-spin' : ''}`}>
+            {refreshing ? '🔄' : '↻'}
+          </span>
+        </button>
+      </div>
       
       {loading ? (
         <div className="text-center text-gray-400">로딩 중...</div>
@@ -116,6 +154,9 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
       <div className="mt-4 pt-3 border-t border-gray-700">
         <p className="text-xs text-gray-500 text-center">
           상위 10위까지 표시됩니다
+        </p>
+        <p className="text-xs text-gray-600 text-center mt-1">
+          💡 데이터가 업데이트되지 않으면 ↻ 버튼을 클릭하세요
         </p>
       </div>
     </div>

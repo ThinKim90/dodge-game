@@ -28,8 +28,8 @@ export async function GET() {
           scores: result.rows
         }
         
-        // 캐시에 저장
-        setCache(cacheKey, response)
+        // 캐시에 저장 (1분 TTL)
+        setCache(cacheKey, response, 60 * 1000)
         
         console.log('리더보드 조회 성공:', result.rows.length + '개 항목')
         return NextResponse.json(response)
@@ -58,8 +58,8 @@ export async function GET() {
         scores: mockScores
       }
       
-      // 캐시에 저장
-      setCache(cacheKey, response)
+      // 캐시에 저장 (1분 TTL)
+      setCache(cacheKey, response, 60 * 1000)
       
       console.log('리더보드 조회 성공:', mockScores.length + '개 항목')
       return NextResponse.json(response)
