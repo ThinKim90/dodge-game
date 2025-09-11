@@ -159,11 +159,11 @@ export async function POST(request: NextRequest) {
           message: '게임 세션이 저장되었습니다',
           data: result.rows[0]
         })
-      } catch (dbError: any) {
+      } catch (dbError: unknown) {
         console.error('❌ 게임 세션 저장 오류:', dbError)
         
         // 테이블이 없는 경우 Mock 응답
-        if (dbError.message?.includes('relation "game_sessions" does not exist')) {
+        if (dbError instanceof Error && dbError.message?.includes('relation "game_sessions" does not exist')) {
           console.log('🧪 game_sessions 테이블이 없음 - Mock 응답 반환')
           return NextResponse.json({
             success: true,

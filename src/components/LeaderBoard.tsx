@@ -10,10 +10,11 @@ interface Score {
 }
 
 interface LeaderBoardProps {
-  key?: number // 새로고침을 위한 key prop
+  refreshKey?: number // 새로고침을 위한 prop
+  onGoToGame?: () => void // 게임으로 이동하는 함수
 }
 
-const LeaderBoard = ({ key }: LeaderBoardProps) => {
+const LeaderBoard = ({ refreshKey, onGoToGame }: LeaderBoardProps) => {
   const [scores, setScores] = useState<Score[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -69,7 +70,7 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
 
   useEffect(() => {
     fetchScores()
-  }, [key]) // key가 변경될 때마다 새로고침
+  }, [refreshKey]) // refreshKey가 변경될 때마다 새로고침
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('ko-KR')
@@ -102,12 +103,22 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
         <button
           onClick={handleForceRefresh}
           disabled={refreshing || loading}
-          className="p-2 text-gray-400 hover:text-white disabled:text-gray-600 transition-colors"
+          className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white disabled:text-gray-600 transition-colors rounded-lg hover:bg-gray-700 disabled:hover:bg-transparent"
           title="강제 새로고침 (캐시 무효화)"
         >
-          <span className={`text-sm ${refreshing ? 'animate-spin' : ''}`}>
-            {refreshing ? '🔄' : '↻'}
-          </span>
+          <svg 
+            className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+            />
+          </svg>
         </button>
       </div>
       
@@ -158,6 +169,21 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
           💡 데이터가 업데이트되지 않으면 ↻ 버튼을 클릭하세요
         </p>
       </div>
+      
+      {/* 게임하러가기 버튼 (모바일에서만 표시) */}
+      {onGoToGame && (
+        <div className="md:hidden mt-4">
+          <button
+            onClick={onGoToGame}
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>게임하러가기</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

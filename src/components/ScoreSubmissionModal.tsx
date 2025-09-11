@@ -61,14 +61,10 @@ const ScoreSubmissionModal = ({
       const data = await response.json()
 
       if (response.ok) {
-        setMessage('점수가 성공적으로 등록되었습니다!')
-        setIsSuccess(true)
         onSubmitSuccess()
         
-        // 2초 후 모달 닫기
-        setTimeout(() => {
-          handleClose()
-        }, 2000)
+        // 성공 시 즉시 모달 닫기 (토스트 메시지로 안내)
+        handleClose()
       } else {
         setMessage(data.error || '점수 등록에 실패했습니다')
         setIsSuccess(false)
@@ -138,10 +134,6 @@ const ScoreSubmissionModal = ({
         {/* 게임 세션이 준비된 경우 닉네임 입력 폼 */}
         {!isSubmittingGameSession && gameSessionId && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="text-center text-green-400 text-sm mb-4">
-              ✅ 게임 데이터가 안전하게 저장되었습니다
-            </div>
-            
             <div>
               <label htmlFor="nickname" className="block text-sm font-medium text-gray-300 mb-2">
                 닉네임 (최대 12자)
@@ -176,12 +168,8 @@ const ScoreSubmissionModal = ({
               </button>
             </div>
 
-            {message && (
-              <div className={`text-center text-sm p-3 rounded-md ${
-                isSuccess 
-                  ? 'bg-green-900 text-green-300 border border-green-700' 
-                  : 'bg-red-900 text-red-300 border border-red-700'
-              }`}>
+            {message && !isSuccess && (
+              <div className="text-center text-sm p-3 rounded-md bg-red-900 text-red-300 border border-red-700">
                 {message}
               </div>
             )}
