@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 
 interface Score {
-  id: number
   nickname: string
   score: number
   level: number
@@ -124,7 +123,7 @@ const LeaderBoard = ({ key }: LeaderBoardProps) => {
             const rank = index + 1
             return (
               <div
-                key={score.id}
+                key={index}
                 className={`flex items-center justify-between p-2 rounded ${
                   rank <= 3 ? 'bg-gray-700' : 'bg-gray-750'
                 }`}

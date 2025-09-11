@@ -7,11 +7,10 @@ export async function POST() {
     await sql`DROP TABLE IF EXISTS scores CASCADE`
     await sql`DROP TABLE IF EXISTS game_sessions CASCADE`
     
-    // game_sessions 테이블 생성 (게임 세션 데이터 저장)
+    // game_sessions 테이블 생성 (완전 UUID 기반)
     await sql`
       CREATE TABLE game_sessions (
-        id SERIAL PRIMARY KEY,
-        session_id UUID UNIQUE NOT NULL,
+        session_id UUID PRIMARY KEY,
         score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100000),
         duration INTEGER NOT NULL CHECK (duration >= 0),
         level INTEGER NOT NULL CHECK (level >= 1),
@@ -21,10 +20,10 @@ export async function POST() {
       )
     `
     
-    // scores 테이블 생성 (UUID 기반 랭킹 테이블)
+    // scores 테이블 생성 (완전 UUID 기반, 외부 노출 ID 제거)
     await sql`
       CREATE TABLE scores (
-        id SERIAL PRIMARY KEY,
+        score_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         nickname VARCHAR(12) NOT NULL,
         session_id UUID NOT NULL REFERENCES game_sessions(session_id),
         score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100000),
@@ -51,9 +50,25 @@ export async function POST() {
       ON game_sessions(created_at DESC)
     `
 
-    console.log('🎮 보안 강화된 데이터베이스 초기화 완료')
-    console.log('- game_sessions: 게임 세션 데이터 저장')
-    console.log('- scores: UUID 기반 랭킹 시스템')
+    // 🔒 보안 강화: 중복 등록 방지 제약 조건
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_unique_session 
+      ON scores(session_id)
+    `
+
+    // 🔒 보안 강화: IP당 시간당 제한을 위한 인덱스
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_scores_ip_time 
+      ON scores(ip_address, created_at)
+    `
+
+    console.log('🎮 완전 보안 강화된 데이터베이스 초기화 완료')
+    console.log('✅ 모든 정수 ID가 UUID로 변경됨 (예측 불가능)')
+    console.log('✅ 외부 노출 ID 완전 제거')
+    console.log('✅ 중복 등록 방지 제약 조건 추가')
+    console.log('✅ IP 기반 제한 인덱스 추가')
+    console.log('- game_sessions: 완전 UUID 기반 게임 세션')
+    console.log('- scores: 보안 강화된 랭킹 시스템')
 
     return NextResponse.json({ 
       ok: true, 

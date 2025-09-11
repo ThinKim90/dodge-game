@@ -17,7 +17,7 @@ export async function GET() {
     if (process.env.POSTGRES_URL) {
       try {
         const result = await sql`
-          SELECT id, nickname, score, level, created_at 
+          SELECT nickname, score, level, created_at 
           FROM scores 
           ORDER BY score DESC, created_at ASC 
           LIMIT 10
@@ -46,11 +46,11 @@ export async function GET() {
       console.log('Mock: 데이터베이스가 연결되지 않아 가짜 리더보드를 반환합니다')
       
       const mockScores = [
-        { id: 1, nickname: '게임마스터', score: 250, level: 8, created_at: '2024-01-15T10:30:00Z' },
-        { id: 2, nickname: '닷지킹', score: 180, level: 6, created_at: '2024-01-15T11:15:00Z' },
-        { id: 3, nickname: '피하기고수', score: 145, level: 5, created_at: '2024-01-15T12:00:00Z' },
-        { id: 4, nickname: '스피드러너', score: 120, level: 4, created_at: '2024-01-15T13:30:00Z' },
-        { id: 5, nickname: '프로게이머', score: 95, level: 3, created_at: '2024-01-15T14:45:00Z' }
+        { nickname: '게임마스터', score: 250, level: 8, created_at: '2024-01-15T10:30:00Z' },
+        { nickname: '닷지킹', score: 180, level: 6, created_at: '2024-01-15T11:15:00Z' },
+        { nickname: '피하기고수', score: 145, level: 5, created_at: '2024-01-15T12:00:00Z' },
+        { nickname: '스피드러너', score: 120, level: 4, created_at: '2024-01-15T13:30:00Z' },
+        { nickname: '프로게이머', score: 95, level: 3, created_at: '2024-01-15T14:45:00Z' }
       ]
       
       const response = {

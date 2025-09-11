@@ -75,7 +75,6 @@ async function getGameSession(sessionId: string): Promise<{
   valid: boolean
   error?: string
   sessionData?: {
-    id: number
     score: number
     level: number
     duration: number
@@ -90,7 +89,6 @@ async function getGameSession(sessionId: string): Promise<{
     return {
       valid: true,
       sessionData: {
-        id: 1,
         score: Math.floor(Math.random() * 100),
         level: Math.floor(Math.random() * 10) + 1,
         duration: Math.floor(Math.random() * 300) + 10,
@@ -103,7 +101,7 @@ async function getGameSession(sessionId: string): Promise<{
 
   try {
     const result = await sql`
-      SELECT id, score, level, duration, ip_address, is_used, created_at
+      SELECT score, level, duration, ip_address, is_used, created_at
       FROM game_sessions 
       WHERE session_id = ${sessionId}
     `
@@ -113,7 +111,6 @@ async function getGameSession(sessionId: string): Promise<{
     }
     
     const session = result.rows[0] as {
-      id: number
       score: number
       level: number
       duration: number
@@ -139,6 +136,67 @@ async function getGameSession(sessionId: string): Promise<{
   } catch (error) {
     console.error('게임 세션 조회 오류:', error)
     return { valid: false, error: '게임 세션 조회 중 오류가 발생했습니다' }
+  }
+}
+
+// 🔒 추가 보안 검증 함수들
+async function validateSessionTiming(sessionId: string): Promise<{ valid: boolean; error?: string }> {
+  if (!process.env.POSTGRES_URL) {
+    return { valid: true } // Mock 모드에서는 통과
+  }
+
+  try {
+    const result = await sql`
+      SELECT created_at 
+      FROM game_sessions 
+      WHERE session_id = ${sessionId}
+    `
+    
+    if (result.rows.length === 0) {
+      return { valid: false, error: '게임 세션을 찾을 수 없습니다' }
+    }
+    
+    const sessionTime = new Date(result.rows[0].created_at)
+    const now = new Date()
+    const diffMinutes = (now.getTime() - sessionTime.getTime()) / (1000 * 60)
+    
+    // 세션 생성 후 5분 이내에만 등록 허용
+    if (diffMinutes > 5) {
+      return { valid: false, error: '세션이 만료되었습니다 (5분 제한)' }
+    }
+    
+    return { valid: true }
+    
+  } catch (error) {
+    console.error('세션 타이밍 검증 오류:', error)
+    return { valid: false, error: '세션 타이밍 검증 중 오류가 발생했습니다' }
+  }
+}
+
+async function checkIPBasedLimits(ip: string): Promise<{ valid: boolean; error?: string }> {
+  if (!process.env.POSTGRES_URL) {
+    return { valid: true } // Mock 모드에서는 통과
+  }
+
+  try {
+    // IP당 1시간 내 최대 10개 등록 제한
+    const result = await sql`
+      SELECT COUNT(*) as count 
+      FROM scores 
+      WHERE ip_address = ${ip} 
+      AND created_at > NOW() - INTERVAL '1 hour'
+    `
+    
+    const hourlyCount = parseInt(result.rows[0].count)
+    if (hourlyCount >= 10) {
+      return { valid: false, error: '시간당 등록 한도를 초과했습니다 (10개/시간)' }
+    }
+    
+    return { valid: true }
+    
+  } catch (error) {
+    console.error('IP 기반 제한 검증 오류:', error)
+    return { valid: false, error: 'IP 기반 제한 검증 중 오류가 발생했습니다' }
   }
 }
 
@@ -182,7 +240,27 @@ export async function POST(request: NextRequest) {
 
     const { nickname, sessionId } = validation.data!
 
-    // 2. 게임 세션 조회 및 검증
+    // 2. 🔒 세션 타이밍 검증 (5분 제한)
+    const timingValidation = await validateSessionTiming(sessionId)
+    if (!timingValidation.valid) {
+      console.log('❌ 세션 타이밍 검증 실패:', timingValidation.error)
+      return NextResponse.json(
+        { error: timingValidation.error },
+        { status: 400 }
+      )
+    }
+
+    // 3. 🔒 IP 기반 제한 검증
+    const ipValidation = await checkIPBasedLimits(ip)
+    if (!ipValidation.valid) {
+      console.log('❌ IP 기반 제한 검증 실패:', ipValidation.error)
+      return NextResponse.json(
+        { error: ipValidation.error },
+        { status: 429 }
+      )
+    }
+
+    // 4. 게임 세션 조회 및 검증
     const sessionResult = await getGameSession(sessionId)
     if (!sessionResult.valid) {
       console.log('❌ 게임 세션 검증 실패:', sessionResult.error)
@@ -198,7 +276,7 @@ export async function POST(request: NextRequest) {
     // 게임 로직은 /api/game/complete에서 이미 검증 완료 ✅
     // UUID 기반 시스템에서는 중복 검증 불필요 (성능 최적화)
 
-    console.log('✅ 검증된 게임 세션 데이터 확인 - UUID 기반 점수 저장 진행')
+    console.log('✅ 모든 보안 검증 통과 - 완전 보안 강화된 점수 저장 진행')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
@@ -210,7 +288,7 @@ export async function POST(request: NextRequest) {
         const scoreResult = await sql`
           INSERT INTO scores (nickname, session_id, score, level, duration, ip_address, created_at)
           VALUES (${nickname}, ${sessionId}, ${score}, ${level}, ${duration}, ${ip}, NOW())
-          RETURNING id, nickname, score, level, duration, created_at
+          RETURNING nickname, score, level, duration, created_at
         `
         
         // 2. 게임 세션을 사용됨으로 표시
@@ -222,7 +300,7 @@ export async function POST(request: NextRequest) {
         
         await sql`COMMIT`
         
-        console.log('✅ UUID 기반 점수 저장 성공:', scoreResult.rows[0])
+        console.log('✅ 완전 보안 강화된 점수 저장 성공:', scoreResult.rows[0])
         
         // 캐시 무효화
         invalidateCache('leaderboard:top10')
@@ -251,7 +329,6 @@ export async function POST(request: NextRequest) {
         success: true,
         message: '점수가 성공적으로 등록되었습니다! (개발 모드)',
         data: {
-          id: Math.floor(Math.random() * 1000),
           nickname,
           score,
           level,
