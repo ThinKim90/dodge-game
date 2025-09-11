@@ -173,32 +173,46 @@ async function validateSessionTiming(sessionId: string): Promise<{ valid: boolea
   }
 }
 
-async function checkIPBasedLimits(ip: string): Promise<{ valid: boolean; error?: string }> {
-  if (!process.env.POSTGRES_URL) {
-    return { valid: true } // Mock 모드에서는 통과
-  }
+// 🔒 IP 기반 제한 검증 함수 (현재 비활성화 - 필요시 활성화)
+// async function checkIPBasedLimits(ip: string): Promise<{ valid: boolean; error?: string }> {
+//   if (!process.env.POSTGRES_URL) {
+//     return { valid: true } // Mock 모드에서는 통과
+//   }
 
-  try {
-    // IP당 1시간 내 최대 10개 등록 제한
-    const result = await sql`
-      SELECT COUNT(*) as count 
-      FROM scores 
-      WHERE ip_address = ${ip} 
-      AND created_at > NOW() - INTERVAL '1 hour'
-    `
+//   try {
+//     // IP당 1시간 내 최대 50개 등록 제한 (합리적인 수준)
+//     const hourlyResult = await sql`
+//       SELECT COUNT(*) as count 
+//       FROM scores 
+//       WHERE ip_address = ${ip} 
+//       AND created_at > NOW() - INTERVAL '1 hour'
+//     `
     
-    const hourlyCount = parseInt(result.rows[0].count)
-    if (hourlyCount >= 10) {
-      return { valid: false, error: '시간당 등록 한도를 초과했습니다 (10개/시간)' }
-    }
+//     const hourlyCount = parseInt(hourlyResult.rows[0].count)
+//     if (hourlyCount >= 50) {
+//       return { valid: false, error: '시간당 등록 한도를 초과했습니다 (50개/시간)' }
+//     }
     
-    return { valid: true }
+//     // IP당 1분 내 최대 5개 등록 제한 (스팸 방지)
+//     const minuteResult = await sql`
+//       SELECT COUNT(*) as count 
+//       FROM scores 
+//       WHERE ip_address = ${ip} 
+//       AND created_at > NOW() - INTERVAL '1 minute'
+//     `
     
-  } catch (error) {
-    console.error('IP 기반 제한 검증 오류:', error)
-    return { valid: false, error: 'IP 기반 제한 검증 중 오류가 발생했습니다' }
-  }
-}
+//     const minuteCount = parseInt(minuteResult.rows[0].count)
+//     if (minuteCount >= 5) {
+//       return { valid: false, error: '분당 등록 한도를 초과했습니다 (5개/분)' }
+//     }
+    
+//     return { valid: true }
+    
+//   } catch (error) {
+//     console.error('IP 기반 제한 검증 오류:', error)
+//     return { valid: false, error: 'IP 기반 제한 검증 중 오류가 발생했습니다' }
+//   }
+// }
 
 // UUID 기반 시스템: 게임 로직 검증은 /api/game/complete에서 이미 완료
 // 여기서는 검증된 세션 데이터만 조회하면 됨 (중복 검증 제거로 성능 최적화)
@@ -250,15 +264,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. 🔒 IP 기반 제한 검증
-    const ipValidation = await checkIPBasedLimits(ip)
-    if (!ipValidation.valid) {
-      console.log('❌ IP 기반 제한 검증 실패:', ipValidation.error)
-      return NextResponse.json(
-        { error: ipValidation.error },
-        { status: 429 }
-      )
-    }
+    // 3. 🔒 IP 기반 제한 검증 (현재 비활성화 - 필요시 활성화)
+    // const ipValidation = await checkIPBasedLimits(ip)
+    // if (!ipValidation.valid) {
+    //   console.log('❌ IP 기반 제한 검증 실패:', ipValidation.error)
+    //   return NextResponse.json(
+    //     { error: ipValidation.error },
+    //     { status: 429 }
+    //   )
+    // }
 
     // 4. 게임 세션 조회 및 검증
     const sessionResult = await getGameSession(sessionId)
@@ -276,7 +290,7 @@ export async function POST(request: NextRequest) {
     // 게임 로직은 /api/game/complete에서 이미 검증 완료 ✅
     // UUID 기반 시스템에서는 중복 검증 불필요 (성능 최적화)
 
-    console.log('✅ 모든 보안 검증 통과 - 완전 보안 강화된 점수 저장 진행')
+    console.log('✅ 핵심 보안 검증 통과 - 점수 저장 진행 (IP 제한: 비활성화)')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
