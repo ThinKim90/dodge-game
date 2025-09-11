@@ -2,23 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@vercel/postgres'
 import { randomUUID } from 'crypto'
 
-// 레이트 리밋 체크 (메모리 기반)
-interface RateLimitData {
-  count: number
-  resetTime: number
-}
-const rateLimitMap = new Map<string, RateLimitData>()
+// IP 기반 요청 제한 (게임 완료: 10 req/min)
+const gameCompleteLimits = new Map<string, { count: number; resetTime: number }>()
 
-// IP 기반 레이트 리밋 (10req/min) - 게임 완료는 더 자주 일어날 수 있음
-function checkRateLimit(ip: string): boolean {
+function checkRateLimit(ip: string, limit: number): boolean {
   const now = Date.now()
-  const windowMs = 60 * 1000 // 1분
-  const limit = 10 // 1분에 10게임까지
-
-  const current = rateLimitMap.get(ip)
+  const current = gameCompleteLimits.get(ip)
   
   if (!current || now > current.resetTime) {
-    rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs })
+    gameCompleteLimits.set(ip, { count: 1, resetTime: now + 60000 }) // 1분
     return true
   }
   
@@ -32,11 +24,9 @@ function checkRateLimit(ip: string): boolean {
 
 // 입력 데이터 타입 정의
 interface GameSessionInput {
-  sessionToken: string
   score: number
   duration: number
   level: number
-  clientEndTime: number
 }
 
 // 입력 검증 함수
@@ -45,12 +35,7 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
     return { valid: false, error: '잘못된 요청 형식입니다' }
   }
   
-  const { sessionToken, score, duration, level, clientEndTime } = body as Record<string, unknown>
-
-  // 세션 토큰 검증
-  if (typeof sessionToken !== 'string' || sessionToken.length < 10) {
-    return { valid: false, error: '유효하지 않은 세션 토큰입니다' }
-  }
+  const { score, duration, level } = body as Record<string, unknown>
 
   // 점수 검증
   if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100000) {
@@ -66,85 +51,46 @@ function validateInput(body: unknown): { valid: boolean; error?: string; data?: 
   if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 500) {
     return { valid: false, error: '레벨이 올바르지 않습니다' }
   }
-
-  // 클라이언트 종료 시간 검증
-  if (typeof clientEndTime !== 'number' || clientEndTime <= 0 || clientEndTime > Date.now() + 1000) {
-    return { valid: false, error: '유효하지 않은 종료 시간입니다' }
-  }
   
   return { 
     valid: true, 
-    data: { sessionToken, score, duration, level, clientEndTime } as GameSessionInput 
+    data: { score, duration, level } as GameSessionInput 
   }
 }
 
-// 🕐 시간 기반 치팅 방지 검증 함수 (서버-클라이언트 시간 차이만 검증)
-function validateGameTime({
-  clientDuration,
-  serverDuration
-}: {
-  clientDuration: number
-  serverDuration: number
-}): { valid: boolean; error?: string; details?: any } {
-  // 1. 기본 시간 범위 검증
-  if (clientDuration < 1000) { // 최소 1초
-    return { valid: false, error: '게임 시간이 너무 짧습니다 (최소 1초 필요)' }
-  }
-  
-  if (clientDuration > 3600000) { // 최대 1시간
-    return { valid: false, error: '게임 시간이 너무 깁니다 (최대 1시간)' }
-  }
-  
-  // 2. 서버-클라이언트 시간 차이 검증 (핵심!)
-  const timeDifference = Math.abs(serverDuration - clientDuration)
-  const maxAllowedDifference = 10000 // 10초 허용 오차 (네트워크 지연 고려)
-  
-  if (timeDifference > maxAllowedDifference) {
-    return { 
-      valid: false, 
-      error: '서버와 클라이언트 시간이 일치하지 않습니다 (시간 조작 의심)',
-      details: {
-        clientDuration: Math.round(clientDuration / 1000) + '초',
-        serverDuration: Math.round(serverDuration / 1000) + '초',
-        difference: Math.round(timeDifference / 1000) + '초',
-        maxAllowed: Math.round(maxAllowedDifference / 1000) + '초'
-      }
-    }
-  }
-  
-  console.log('✅ 시간 검증 통과:', {
-    clientDuration: Math.round(clientDuration / 1000) + '초',
-    serverDuration: Math.round(serverDuration / 1000) + '초',
-    difference: Math.round(timeDifference / 1000) + '초'
-  })
-  
-  return { valid: true }
-}
-
-// 🛡️ 핵심 게임 로직 검증 함수 (기존 로직 유지)
+// 게임 로직 검증 함수
 function validateGameLogic(score: number, level: number, duration: number): { valid: boolean; error?: string } {
-  // 레벨과 점수 일관성 검증 (20점마다 레벨업)
-  const expectedLevel = Math.floor(score / 20) + 1
-  const levelDiff = Math.abs(level - expectedLevel)
+  // 기본 범위 검증
+  if (score < 0 || score > 100000) {
+    return { valid: false, error: '점수가 올바르지 않습니다' }
+  }
   
-  if (levelDiff > 3) { // 3레벨 이상 차이나면 의심
+  if (level < 1 || level > 500) {
+    return { valid: false, error: '레벨이 올바르지 않습니다' }
+  }
+  
+  if (duration < 1 || duration > 3600) {
+    return { valid: false, error: '플레이 시간이 올바르지 않습니다' }
+  }
+  
+  // 점수와 레벨의 일관성 검증 (관대한 검증)
+  const expectedLevel = Math.floor(score / 20) + 1 // 20점마다 레벨업
+  if (level > expectedLevel + 2) { // 2레벨까지 허용
     return { valid: false, error: '레벨과 점수가 일치하지 않습니다' }
   }
-
+  
   return { valid: true }
 }
 
 export async function POST(request: NextRequest) {
   try {
     // IP 주소 추출
-    const forwarded = request.headers.get('x-forwarded-for')
-    const ip = forwarded ? forwarded.split(',')[0] : 
-               request.headers.get('x-real-ip') || 
-               '127.0.0.1'
+    const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+    console.log('🎮 게임 완료 요청 수신:', { ip })
 
-    // 레이트 리밋 체크
-    if (!checkRateLimit(ip)) {
-      console.log(`게임 완료 레이트 리밋 초과: ${ip}`)
+    // IP 기반 요청 제한 (게임 완료: 10 req/min)
+    if (!checkRateLimit(ip, 10)) {
+      console.log('❌ 게임 완료 요청 제한 초과:', { ip })
       return NextResponse.json(
         { error: '너무 많은 요청입니다. 잠시 후 다시 시도해주세요.' },
         { status: 429 }
@@ -154,11 +100,9 @@ export async function POST(request: NextRequest) {
     // 요청 본문 파싱
     const body = await request.json()
     console.log('🎮 게임 완료 데이터 수신:', { 
-      sessionToken: body.sessionToken,
       score: body.score, 
       level: body.level, 
-      duration: body.duration,
-      clientEndTime: body.clientEndTime,
+      duration: body.duration, 
       ip 
     })
 
@@ -172,7 +116,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { sessionToken, score, duration, level, clientEndTime } = validation.data!
+    const { score, duration, level } = validation.data!
 
     // 2. 세션 정보 조회 (서버 시작 시간 가져오기)
     let serverStartTime: number
@@ -259,38 +203,57 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('✅ 시간 기반 치팅 방지 검증 통과 - 세션 저장 진행')
+    // 3. UUID 생성
+    const sessionId = randomUUID()
+
+    console.log('✅ 게임 세션 검증 통과 - 세션 저장 진행')
 
     // 데이터베이스가 설정된 경우 Vercel Postgres 사용
     if (process.env.POSTGRES_URL) {
       try {
-        // 게임 세션을 업데이트 (시간 검증 데이터 포함)
+        // 현재 시간을 서버 시작/종료 시간으로 사용 (간단한 구현)
+        const now = Date.now()
+        const serverStartTime = now - (duration * 1000) // 대략적인 시작 시간
+        const serverEndTime = now
+        
+        // 게임 세션을 데이터베이스에 저장
         const result = await sql`
-          UPDATE game_sessions 
-          SET 
-            score = ${score},
-            level = ${level},
-            duration = ${duration},
-            server_duration = ${serverDuration},
-            client_duration = ${duration * 1000},
-            status = 'completed',
-            is_used = false
-          WHERE session_id = ${sessionId}
-          RETURNING session_id, score, level, duration, server_duration, client_duration, created_at
+          INSERT INTO game_sessions (
+            session_id, 
+            server_start_time, 
+            client_start_time, 
+            score, 
+            level, 
+            duration, 
+            server_duration, 
+            client_duration, 
+            status, 
+            ip_address, 
+            is_used
+          )
+          VALUES (
+            ${sessionId}, 
+            ${serverStartTime}, 
+            ${serverStartTime}, 
+            ${score}, 
+            ${level}, 
+            ${duration}, 
+            ${serverEndTime - serverStartTime}, 
+            ${duration * 1000}, 
+            'completed', 
+            ${ip}, 
+            false
+          )
+          RETURNING session_id, score, level, duration, created_at
         `
         
-        console.log('✅ 시간 검증된 게임 세션 저장 성공:', result.rows[0])
+        console.log('✅ 게임 세션 저장 성공:', result.rows[0])
         
         return NextResponse.json({
           success: true,
           sessionId,
-          message: '시간 검증된 게임 세션이 저장되었습니다',
-          data: result.rows[0],
-          timeValidation: {
-            serverDuration: Math.round(serverDuration / 1000) + '초',
-            clientDuration: duration + '초',
-            scorePerSecond: Math.round((score / (duration || 1)) * 10) / 10
-          }
+          message: '게임 세션이 저장되었습니다',
+          data: result.rows[0]
         })
       } catch (dbError: unknown) {
         console.error('❌ 게임 세션 저장 오류:', dbError)
@@ -301,20 +264,13 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             success: true,
             sessionId,
-            message: '시간 검증된 게임 세션이 저장되었습니다 (개발 모드)',
+            message: '게임 세션이 저장되었습니다 (개발 모드)',
             data: {
               session_id: sessionId,
               score,
               level,
               duration,
-              server_duration: serverDuration,
-              client_duration: duration * 1000,
               created_at: new Date().toISOString()
-            },
-            timeValidation: {
-              serverDuration: Math.round(serverDuration / 1000) + '초',
-              clientDuration: duration + '초',
-              scorePerSecond: Math.round((score / (duration || 1)) * 10) / 10
             }
           })
         }
@@ -326,25 +282,18 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Mock 응답 (개발용)
-      console.log('🧪 Mock: 시간 검증된 게임 세션 가짜 응답 반환')
+      console.log('🧪 Mock: 게임 세션 가짜 응답 반환')
       
       return NextResponse.json({
         success: true,
         sessionId,
-        message: '시간 검증된 게임 세션이 저장되었습니다 (개발 모드)',
+        message: '게임 세션이 저장되었습니다 (개발 모드)',
         data: {
           session_id: sessionId,
           score,
           level,
           duration,
-          server_duration: serverDuration,
-          client_duration: duration * 1000,
           created_at: new Date().toISOString()
-        },
-        timeValidation: {
-          serverDuration: Math.round(serverDuration / 1000) + '초',
-          clientDuration: duration + '초',
-          scorePerSecond: Math.round((score / (duration || 1)) * 10) / 10
         }
       })
     }
