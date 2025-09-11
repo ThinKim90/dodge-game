@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { GAME_VERSION } from '../lib/version'
 
 interface PatchNotesModalProps {
   isOpen: boolean
@@ -9,6 +10,17 @@ interface PatchNotesModalProps {
 
 const PatchNotesModal = ({ isOpen, onClose, onDontShowToday }: PatchNotesModalProps) => {
   const [isClosing, setIsClosing] = useState(false)
+  
+  // 현재 날짜를 자동으로 가져오기
+  const currentDate = new Date()
+  const currentYear = currentDate.getFullYear()
+  const currentMonth = currentDate.getMonth() + 1 // 0부터 시작하므로 +1
+  const currentDay = currentDate.getDate()
+  
+  // 버전 정보 (version.ts에서 가져오기)
+  const VERSION = GAME_VERSION.version
+  const BUILD_DATE = GAME_VERSION.buildDate
+  const DISPLAY_DATE = `${currentYear}년 ${currentMonth}월 ${currentDay}일`
 
   const handleClose = () => {
     setIsClosing(true)
@@ -54,9 +66,12 @@ const PatchNotesModal = ({ isOpen, onClose, onDontShowToday }: PatchNotesModalPr
           <div className="mb-6">
             <div className="flex items-center space-x-2 mb-2">
               <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-2.5 py-0.5 rounded-full">
-                v1.2.0
+                v{VERSION}
               </span>
-              <span className="text-gray-400 text-sm">2024년 12월</span>
+              <span className="text-gray-400 text-sm">{DISPLAY_DATE}</span>
+            </div>
+            <div className="text-xs text-gray-500 mb-2">
+              빌드: {BUILD_DATE}
             </div>
             <h3 className="text-lg font-semibold text-white mb-3">주요 업데이트</h3>
           </div>
