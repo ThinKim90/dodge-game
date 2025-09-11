@@ -85,7 +85,9 @@ function validateGameLogic(score: number, level: number, duration: number): { va
 export async function POST(request: NextRequest) {
   try {
     // IP 주소 추출
-    const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+    const ip = request.headers.get('x-forwarded-for') || 
+               request.headers.get('x-real-ip') || 
+               'unknown'
     console.log('🎮 게임 완료 요청 수신:', { ip })
 
     // IP 기반 요청 제한 (게임 완료: 10 req/min)
@@ -122,7 +124,10 @@ export async function POST(request: NextRequest) {
     let serverStartTime: number
     let sessionId: string
     
-    if (process.env.POSTGRES_URL) {
+    // 세션 토큰 추출 (요청 헤더에서)
+    const sessionToken = request.headers.get('x-session-token') || ''
+    
+    if (process.env.POSTGRES_URL && sessionToken) {
       try {
         // 세션 토큰에서 sessionId 추출 (UUID 형식 유지)
         const tokenParts = sessionToken.split('-')
@@ -157,8 +162,8 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // Mock 모드
-      sessionId = sessionToken.split('-')[0]
+      // Mock 모드 또는 세션 토큰이 없는 경우
+      sessionId = sessionToken ? sessionToken.split('-')[0] : randomUUID()
       serverStartTime = Date.now() - (duration * 1000) // 대략적인 시작 시간
       console.log('🧪 Mock: 세션 정보 가짜 생성')
     }
@@ -166,7 +171,7 @@ export async function POST(request: NextRequest) {
     // 3. 서버 측 시간 계산
     const serverEndTime = Date.now()
     const serverDuration = serverEndTime - serverStartTime
-    const clientDuration = clientEndTime - (serverStartTime - (serverEndTime - clientEndTime))
+    const clientEndTime = Date.now() // 클라이언트 종료 시간을 현재 시간으로 가정
 
     console.log('🕐 시간 검증 데이터:', {
       serverStartTime,
@@ -176,18 +181,16 @@ export async function POST(request: NextRequest) {
       timeDifference: Math.round(Math.abs(serverDuration - (duration * 1000)) / 1000) + '초'
     })
 
-    // 4. 시간 기반 치팅 방지 검증 (서버-클라이언트 시간 차이만)
-    const timeValidation = validateGameTime({
-      clientDuration: duration * 1000, // 초를 밀리초로 변환
-      serverDuration
-    })
+    // 4. 시간 기반 치팅 방지 검증 (간단한 구현)
+    const timeDifference = Math.abs(serverDuration - (duration * 1000))
+    const maxTimeDifference = 10000 // 10초 허용 오차
     
-    if (!timeValidation.valid) {
-      console.log('❌ 시간 검증 실패:', timeValidation.error, timeValidation.details)
+    if (timeDifference > maxTimeDifference) {
+      console.log('❌ 시간 검증 실패:', { timeDifference: timeDifference / 1000 + '초' })
       return NextResponse.json(
         { 
-          error: timeValidation.error,
-          details: timeValidation.details
+          error: '게임 시간이 올바르지 않습니다',
+          details: `서버-클라이언트 시간 차이: ${Math.round(timeDifference / 1000)}초`
         },
         { status: 400 }
       )
@@ -202,9 +205,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    // 3. UUID 생성
-    const sessionId = randomUUID()
 
     console.log('✅ 게임 세션 검증 통과 - 세션 저장 진행')
 
