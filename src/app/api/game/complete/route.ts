@@ -180,8 +180,14 @@ export async function POST(request: NextRequest) {
     
     if (process.env.POSTGRES_URL) {
       try {
-        // 세션 토큰에서 sessionId 추출 (간단한 파싱)
-        sessionId = sessionToken.split('-')[0]
+        // 세션 토큰에서 sessionId 추출 (UUID 형식 유지)
+        const tokenParts = sessionToken.split('-')
+        if (tokenParts.length >= 5) {
+          // UUID 형식: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+          sessionId = tokenParts.slice(0, 5).join('-')
+        } else {
+          sessionId = sessionToken.split('-')[0]
+        }
         
         const sessionResult = await sql`
           SELECT server_start_time, client_start_time, status
