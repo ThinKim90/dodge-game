@@ -76,7 +76,9 @@ const DodgeGame = () => {
   const [levelUpEffect, setLevelUpEffect] = useState(false)
   const [imagesLoaded, setImagesLoaded] = useState(false)
   const [gameSessionId, setGameSessionId] = useState<string | null>(null) // 게임 세션 UUID
+  const [gameSessionToken, setGameSessionToken] = useState<string | null>(null) // 게임 세션 토큰
   const [isSubmittingGameSession, setIsSubmittingGameSession] = useState(false) // 게임 세션 저장 중
+  const [serverStartTime, setServerStartTime] = useState<number | null>(null) // 서버 시작 시간
   const [showHitboxes, setShowHitboxes] = useState(false) // 히트박스 디버그 모드
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null) // 토스트 알림
   const [mobileTab, setMobileTab] = useState<'game' | 'leaderboard'>('game') // 모바일 탭 상태
@@ -315,14 +317,55 @@ const DodgeGame = () => {
   }, [])
 
 
-  // 게임 완료 시 세션 저장
+  // 게임 시작 시 서버에 세션 등록
+  const startGameSession = useCallback(async (sessionId: string) => {
+    try {
+      console.log('🎮 게임 시작 - 서버에 세션 등록 중...', { sessionId })
+      
+      const response = await fetch('/api/game/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionId,
+          clientStartTime: Date.now()
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok && data.serverStartTime && data.sessionToken) {
+        setServerStartTime(data.serverStartTime)
+        setGameSessionToken(data.sessionToken)
+        console.log('✅ 게임 시작 세션 등록 성공:', { 
+          serverStartTime: data.serverStartTime,
+          sessionToken: data.sessionToken 
+        })
+        return true
+      } else {
+        console.error('❌ 게임 시작 세션 등록 실패:', data.error)
+        return false
+      }
+    } catch (error) {
+      console.error('❌ 게임 시작 세션 등록 네트워크 오류:', error)
+      return false
+    }
+  }, [])
+
+  // 게임 완료 시 세션 저장 (시간 검증 포함)
   const submitGameSession = useCallback(async (finalScore: number, finalLevel: number, finalDuration: number) => {
-    if (isSubmittingGameSession) return // 중복 요청 방지
+    if (isSubmittingGameSession || !gameSessionToken) return // 중복 요청 방지 및 세션 토큰 확인
     
     setIsSubmittingGameSession(true)
     
     try {
-      console.log('🎮 게임 완료 - 서버에 세션 저장 중...', { finalScore, finalLevel, finalDuration })
+      console.log('🎮 게임 완료 - 서버에 세션 저장 중...', { 
+        finalScore, 
+        finalLevel, 
+        finalDuration,
+        sessionToken: gameSessionToken 
+      })
       
       const response = await fetch('/api/game/complete', {
         method: 'POST',
@@ -330,9 +373,11 @@ const DodgeGame = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          sessionToken: gameSessionToken,
           score: finalScore,
           level: finalLevel,
-          duration: finalDuration
+          duration: finalDuration,
+          clientEndTime: Date.now()
         })
       })
       
@@ -340,18 +385,29 @@ const DodgeGame = () => {
       
       if (response.ok && data.sessionId) {
         setGameSessionId(data.sessionId)
-        console.log('✅ 게임 세션 저장 성공:', data.sessionId)
+        console.log('✅ 시간 검증된 게임 세션 저장 성공:', data.sessionId)
+        if (data.timeValidation) {
+          console.log('🕐 시간 검증 결과:', data.timeValidation)
+        }
       } else {
-        console.error('❌ 게임 세션 저장 실패:', data.error)
+        console.error('❌ 게임 세션 저장 실패:', data.error, data.details)
         setGameSessionId(null)
+        setToast({ 
+          message: `점수 등록 실패: ${data.error}`, 
+          type: 'error' 
+        })
       }
     } catch (error) {
       console.error('❌ 게임 세션 저장 네트워크 오류:', error)
       setGameSessionId(null)
+      setToast({ 
+        message: '네트워크 오류로 점수 등록에 실패했습니다', 
+        type: 'error' 
+      })
     } finally {
       setIsSubmittingGameSession(false)
     }
-  }, [isSubmittingGameSession])
+  }, [isSubmittingGameSession, gameSessionToken])
 
   // 충돌 체크
   const checkCollisions = useCallback(() => {
@@ -513,13 +569,15 @@ const DodgeGame = () => {
   }
 
   // 게임 시작
-  const startGame = useCallback(() => {
+  const startGame = useCallback(async () => {
     setGameState('playing')
     setScore(0)
     setLevel(1)
     setGameTime(0)
     setLevelUpEffect(false)
     setGameSessionId(null) // 세션 ID 초기화
+    setGameSessionToken(null) // 세션 토큰 초기화
+    setServerStartTime(null) // 서버 시작 시간 초기화
     setIsSubmittingGameSession(false) // 세션 저장 상태 초기화
     
     // 게임 오브젝트 초기화
@@ -539,7 +597,19 @@ const DodgeGame = () => {
     // 가속도 시스템 초기화
     playerVelocityRef.current = 0
     
-  }, [])
+    // 서버에 게임 시작 세션 등록
+    const sessionId = crypto.randomUUID()
+    const sessionRegistered = await startGameSession(sessionId)
+    
+    if (!sessionRegistered) {
+      console.warn('⚠️ 게임 시작 세션 등록 실패 - 시간 검증 없이 진행')
+      setToast({ 
+        message: '게임 시작 세션 등록에 실패했습니다. 시간 검증이 비활성화됩니다.', 
+        type: 'info' 
+      })
+    }
+    
+  }, [startGameSession])
   
   // 게임 재시작
   const restartGame = useCallback(() => {
