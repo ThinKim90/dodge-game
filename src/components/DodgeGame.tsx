@@ -42,6 +42,8 @@ interface GameObject {
 
 interface FallingObject extends GameObject {
   speed: number
+  spawnLevel: number // 운석이 생성된 시점의 레벨
+  scale: number // 운석 크기 스케일 (0.8~1.2)
 }
 
 // 레벨 계산 함수
@@ -53,6 +55,20 @@ const getCurrentLevel = (score: number): number => {
 const getSpeedByLevel = (level: number): number => {
   // 적절한 난이도 - 점진적 속도 증가
   return GAME_CONFIG.INITIAL_FALLING_SPEED * (1 + 0.5 * (level - 1))
+}
+
+// 레벨별 운석 크기 스케일 계산 함수
+const getMeteorScaleByLevel = (level: number): number => {
+  if (level <= 2) {
+    // 레벨 1-2: 80~90%
+    return 0.8 + Math.random() * 0.1
+  } else if (level <= 4) {
+    // 레벨 3-4: 90~100%
+    return 0.9 + Math.random() * 0.1
+  } else {
+    // 레벨 5+: 100~120%
+    return 1.0 + Math.random() * 0.2
+  }
 }
 
 const DodgeGame = () => {
@@ -138,12 +154,15 @@ const DodgeGame = () => {
     }
   }, [])
 
-  // 운석 원 히트박스 계산
-  const getMeteorCircleHitbox = useCallback((meteor: GameObject): CircleHitbox => {
-    const radius = (Math.min(meteor.width, meteor.height) / 2) * HITBOX_CONFIG.METEOR_SCALE
+  // 운석 원 히트박스 계산 (스케일 반영)
+  const getMeteorCircleHitbox = useCallback((meteor: FallingObject): CircleHitbox => {
+    // 스케일된 크기로 히트박스 계산
+    const scaledWidth = meteor.width * meteor.scale
+    const scaledHeight = meteor.height * meteor.scale
+    const radius = (Math.min(scaledWidth, scaledHeight) / 2) * HITBOX_CONFIG.METEOR_SCALE
     return {
-      cx: meteor.x + meteor.width / 2,
-      cy: meteor.y + meteor.height / 2,
+      cx: meteor.x + scaledWidth / 2,
+      cy: meteor.y + scaledHeight / 2,
       radius
     }
   }, [])
@@ -169,7 +188,7 @@ const DodgeGame = () => {
   }, [])
 
   // 새로운 충돌 감지 함수
-  const checkCollision = useCallback((player: GameObject, meteor: GameObject): boolean => {
+  const checkCollision = useCallback((player: GameObject, meteor: FallingObject): boolean => {
     const playerEllipse = getPlayerEllipseHitbox(player)
     const meteorCircle = getMeteorCircleHitbox(meteor)
     return ellipseVsCircle(playerEllipse, meteorCircle)
@@ -262,12 +281,15 @@ const DodgeGame = () => {
       playerCenter - meteorWidth / 2 + (Math.random() - 0.5) * 40 // ±20px 오차
     ))
     
+    const scale = getMeteorScaleByLevel(level)
     fallingObjectsRef.current.push({
       x: spawnX,
       y: 0,
       width: GAME_CONFIG.FALLING_OBJECT_WIDTH,
       height: GAME_CONFIG.FALLING_OBJECT_HEIGHT,
-      speed: getSpeedByLevel(level)
+      speed: getSpeedByLevel(level),
+      spawnLevel: level,
+      scale: scale
     })
     
     // 마지막 타겟팅 운석 생성 시간 업데이트
@@ -290,12 +312,15 @@ const DodgeGame = () => {
     if (Math.random() < currentSpawnRate) {
       const spawnX = Math.random() * (GAME_CONFIG.CANVAS_WIDTH - GAME_CONFIG.FALLING_OBJECT_WIDTH)
       
+      const scale = getMeteorScaleByLevel(level)
       fallingObjectsRef.current.push({
         x: spawnX,
         y: 0,
         width: GAME_CONFIG.FALLING_OBJECT_WIDTH,
         height: GAME_CONFIG.FALLING_OBJECT_HEIGHT,
-        speed: getSpeedByLevel(level)
+        speed: getSpeedByLevel(level),
+        spawnLevel: level,
+        scale: scale
       })
     }
   }, [level])
@@ -477,28 +502,32 @@ const DodgeGame = () => {
     
     // 낙하물 그리기 (운석 이미지 또는 기본 그래픽)
     fallingObjectsRef.current.forEach(obj => {
+      // 스케일된 크기 계산
+      const scaledWidth = obj.width * obj.scale
+      const scaledHeight = obj.height * obj.scale
+      
       if (imagesLoaded && meteorImages.current.length > 0) {
-        // 레벨별 운석 이미지 선택
-        const meteorIndex = level >= 5 ? 2 : level >= 3 ? 1 : 0
+        // 각 운석의 생성 시점 레벨에 따른 이미지 선택
+        const meteorIndex = obj.spawnLevel >= 5 ? 2 : obj.spawnLevel >= 3 ? 1 : 0
         const meteorImg = meteorImages.current[meteorIndex]
         if (meteorImg) {
-          ctx.drawImage(meteorImg, obj.x, obj.y, obj.width, obj.height)
+          ctx.drawImage(meteorImg, obj.x, obj.y, scaledWidth, scaledHeight)
         }
       } else {
         // 기본 그래픽 (fallback)
         let color = '#ef4444' // 기본 빨간색
         
-        // 현재 레벨별 색상 변경
-        if (level >= 5) color = '#8b5cf6' // 보라색  
-        else if (level >= 3) color = '#f59e0b' // 주황색
+        // 각 운석의 생성 시점 레벨별 색상 변경
+        if (obj.spawnLevel >= 5) color = '#8b5cf6' // 보라색  
+        else if (obj.spawnLevel >= 3) color = '#f59e0b' // 주황색
         
         ctx.fillStyle = color
-        ctx.fillRect(obj.x, obj.y, obj.width, obj.height)
+        ctx.fillRect(obj.x, obj.y, scaledWidth, scaledHeight)
         
         // 테두리
         ctx.strokeStyle = '#dc2626'
         ctx.lineWidth = 2
-        ctx.strokeRect(obj.x, obj.y, obj.width, obj.height)
+        ctx.strokeRect(obj.x, obj.y, scaledWidth, scaledHeight)
       }
     })
     
@@ -512,7 +541,7 @@ const DodgeGame = () => {
       ctx.ellipse(playerEllipse.cx, playerEllipse.cy, playerEllipse.rx, playerEllipse.ry, 0, 0, 2 * Math.PI)
       ctx.stroke()
       
-      // 운석 원 히트박스 (주황색)
+      // 운석 원 히트박스 (주황색) - 스케일 반영
       ctx.strokeStyle = '#f97316'
       ctx.lineWidth = 2
       fallingObjectsRef.current.forEach(obj => {
@@ -689,7 +718,7 @@ const DodgeGame = () => {
           setShowModal(true) // 점수 등록 모달 열기
         }
       }
-      if (e.key === 'h' || e.key === 'H') {
+      if (e.key === 'h' || e.key === 'H' || e.key === 'ㅗ') {
         e.preventDefault()
         setShowHitboxes(prev => !prev)
         console.log('🎯 히트박스 디버그 모드:', !showHitboxes ? '활성화' : '비활성화')
@@ -764,7 +793,7 @@ const DodgeGame = () => {
         cancelAnimationFrame(gameLoopRef.current)
       }
     }
-  }, [gameState, startGame, restartGame, showHitboxes])
+  }, [gameState, startGame, restartGame])
 
   // RAF 시작/정리 (gameState만 의존하여 중복 방지)
   useEffect(() => {
